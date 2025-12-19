@@ -9,7 +9,7 @@ import Foundation
 import RealityKit
 import SceneKit
 
-extension ModelEntity {
+public extension ModelEntity {
     /// Create a ModelEntity from an SCNScene (such as one loaded from a .dae file)
     @MainActor
     static func fromSCNScene(_ scene: SCNScene) async -> ModelEntity? {
@@ -46,7 +46,7 @@ extension ModelEntity {
     }
 }
 
-extension SCNNode {
+public extension SCNNode {
     /// Recursively find all geometry nodes in this node's hierarchy
     var geometryNodes: [SCNNode] {
         var result: [SCNNode] = []
@@ -71,7 +71,7 @@ extension SCNNode {
     }
 }
 
-extension SCNGeometry {
+public extension SCNGeometry {
     func unpack() {
         elements.enumerated().forEach { i, element in
             print("  * geometry.elements[\(i)]:", element)
@@ -162,7 +162,7 @@ extension SCNGeometry {
     }
 }
 
-extension SCNMaterial {
+public extension SCNMaterial {
     @MainActor var rkMaterial: PhysicallyBasedMaterial? {
         var material = PhysicallyBasedMaterial()
         
@@ -177,7 +177,7 @@ extension SCNMaterial {
 }
 
 #if os(ios)
-extension SCNMaterialProperty {
+public extension SCNMaterialProperty {
     var uiColor: UIColor? {
         contents as? UIColor
     }
@@ -188,7 +188,7 @@ extension SCNMaterialProperty {
 }
 #endif
 #if os(macOS)
-extension SCNMaterialProperty {
+public extension SCNMaterialProperty {
     var uiColor: NSColor? {
         contents as? NSColor
     }
@@ -200,7 +200,7 @@ extension SCNMaterialProperty {
 #endif
 
 
-extension SCNGeometrySource {
+public extension SCNGeometrySource {
     var hasFloat3Array: Bool {
         semantic == .vertex || semantic == .normal
     }
@@ -295,7 +295,7 @@ extension SCNGeometrySource {
     }
 }
 
-extension [SCNGeometrySource] {
+public extension [SCNGeometrySource] {
     var vertices: [SIMD3<Float>]? {
         filter { $0.semantic == .vertex }.first?.getFloat3Array()
     }
@@ -309,7 +309,7 @@ extension [SCNGeometrySource] {
     }
 }
 
-extension SCNGeometryElement {
+public extension SCNGeometryElement {
     var indices: [UInt32] {
         var result = [UInt32]()
         

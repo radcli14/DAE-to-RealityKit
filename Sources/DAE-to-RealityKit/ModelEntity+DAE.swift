@@ -185,6 +185,23 @@ public extension SCNMaterial {
         var material = PhysicallyBasedMaterial()
         var hasAnyProperty = false
         
+        // Debug: Print all material property contents
+        print("  🔍 Material Debug Info:")
+        print("    diffuse.contents: \(String(describing: diffuse.contents))")
+        print("    specular.contents: \(String(describing: specular.contents))")
+        print("    reflective.contents: \(String(describing: reflective.contents))")
+        print("    emission.contents: \(String(describing: emission.contents))")
+        print("    transparent.contents: \(String(describing: transparent.contents))")
+        print("    metalness.contents: \(String(describing: metalness.contents))")
+        print("    roughness.contents: \(String(describing: roughness.contents))")
+        print("    normal.contents: \(String(describing: normal.contents))")
+        print("    ambientOcclusion.contents: \(String(describing: ambientOcclusion.contents))")
+        print("    selfIllumination.contents: \(String(describing: selfIllumination.contents))")
+        print("    multiply.contents: \(String(describing: multiply.contents))")
+        print("    shininess: \(shininess)")
+        print("    transparency: \(transparency)")
+        print("    lightingModel: \(lightingModel.rawValue)")
+        
         // Base Color (from diffuse property)
         if let color = diffuse.uiColor {
             material.baseColor = .init(tint: color)
@@ -257,6 +274,17 @@ public extension SCNMaterial {
                 hasAnyProperty = true
                 print("  ✓ Applied metallic (texture)")
             }
+        }
+        
+        // Try using shininess as a fallback for specular/roughness
+        if shininess > 0 {
+            // Shininess typically ranges from 0-1000+, normalize it
+            // Higher shininess = lower roughness
+            let normalizedShininess = min(shininess / 1000.0, 1.0)
+            let roughnessValue = 1.0 - Float(normalizedShininess)
+            material.roughness = .init(floatLiteral: roughnessValue)
+            hasAnyProperty = true
+            print("  ✓ Applied roughness from shininess: \(roughnessValue) (shininess: \(shininess))")
         }
         
         // Return nil if no properties were set

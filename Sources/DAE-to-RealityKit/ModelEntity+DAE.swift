@@ -207,7 +207,7 @@ public extension SCNMaterial {
             }
         }
         
-        // Roughness (numeric value or texture)
+        // Roughness (numeric value or texture, with fallback to specular conversion)
         if let roughnessNumber = roughness.contents as? NSNumber {
             material.roughness = .init(floatLiteral: roughnessNumber.floatValue)
             hasAnyProperty = true
@@ -218,6 +218,10 @@ public extension SCNMaterial {
                 hasAnyProperty = true
                 print("  ✓ Applied roughness (texture)")
             }
+        } else if let specularNumber = specular.contents as? NSNumber {
+            material.specular = .init(floatLiteral: specularNumber.floatValue)
+            hasAnyProperty = true
+            print("  ✓ Applied specular value: \(specularNumber.floatValue))")
         }
         
         // Metallic (numeric value or texture)

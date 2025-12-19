@@ -224,11 +224,19 @@ public extension SCNMaterial {
             }
         }
         
-        // Roughness (numeric value or texture)
+        // Roughness (numeric value, color, or texture)
         if let roughnessNumber = roughness.contents as? NSNumber {
             material.roughness = .init(floatLiteral: roughnessNumber.floatValue)
             hasAnyProperty = true
             print("  ✓ Applied roughness value: \(roughnessNumber.floatValue)")
+        } else if let roughnessColor = roughness.uiColor {
+            // Extract grayscale value from color (using red component as they're all equal)
+            var red: CGFloat = 0
+            roughnessColor.getRed(&red, green: nil, blue: nil, alpha: nil)
+            let roughnessValue = Float(red)
+            material.roughness = .init(floatLiteral: roughnessValue)
+            hasAnyProperty = true
+            print("  ✓ Applied roughness from color: \(roughnessValue)")
         } else if let cgImage = roughness.cgImage {
             if let textureResource = try? TextureResource(image: cgImage, options: .init(semantic: .raw)) {
                 material.roughness = .init(texture: .init(textureResource))
@@ -237,11 +245,18 @@ public extension SCNMaterial {
             }
         }
         
-        // Specular (numeric value or texture)
+        // Specular (numeric value, color, or texture)
         if let specularNumber = specular.contents as? NSNumber {
             material.specular = .init(floatLiteral: specularNumber.floatValue)
             hasAnyProperty = true
             print("  ✓ Applied specular value: \(specularNumber.floatValue)")
+        } else if let specularColor = specular.uiColor {
+            var red: CGFloat = 0
+            specularColor.getRed(&red, green: nil, blue: nil, alpha: nil)
+            let specularValue = Float(red)
+            material.specular = .init(floatLiteral: specularValue)
+            hasAnyProperty = true
+            print("  ✓ Applied specular from color: \(specularValue)")
         } else if let cgImage = specular.cgImage {
             if let textureResource = try? TextureResource(image: cgImage, options: .init(semantic: .raw)) {
                 material.specular = .init(texture: .init(textureResource))
@@ -255,6 +270,13 @@ public extension SCNMaterial {
             material.clearcoat = .init(floatLiteral: reflectivityNumber.floatValue)
             hasAnyProperty = true
             print("  ✓ Applied clearcoat from reflectivity: \(reflectivityNumber.floatValue)")
+        } else if let reflectiveColor = reflective.uiColor {
+            var red: CGFloat = 0
+            reflectiveColor.getRed(&red, green: nil, blue: nil, alpha: nil)
+            let reflectiveValue = Float(red)
+            material.clearcoat = .init(floatLiteral: reflectiveValue)
+            hasAnyProperty = true
+            print("  ✓ Applied clearcoat from reflective color: \(reflectiveValue)")
         } else if let cgImage = reflective.cgImage {
             if let textureResource = try? TextureResource(image: cgImage, options: .init(semantic: .raw)) {
                 material.clearcoat = .init(texture: .init(textureResource))
@@ -263,11 +285,18 @@ public extension SCNMaterial {
             }
         }
         
-        // Metallic (numeric value or texture)
+        // Metallic (numeric value, color, or texture)
         if let metallicNumber = metalness.contents as? NSNumber {
             material.metallic = .init(floatLiteral: metallicNumber.floatValue)
             hasAnyProperty = true
             print("  ✓ Applied metallic value: \(metallicNumber.floatValue)")
+        } else if let metallicColor = metalness.uiColor {
+            var red: CGFloat = 0
+            metallicColor.getRed(&red, green: nil, blue: nil, alpha: nil)
+            let metallicValue = Float(red)
+            material.metallic = .init(floatLiteral: metallicValue)
+            hasAnyProperty = true
+            print("  ✓ Applied metallic from color: \(metallicValue)")
         } else if let cgImage = metalness.cgImage {
             if let textureResource = try? TextureResource(image: cgImage, options: .init(semantic: .raw)) {
                 material.metallic = .init(texture: .init(textureResource))

@@ -207,7 +207,7 @@ public extension SCNMaterial {
             }
         }
         
-        // Roughness (numeric value or texture, with fallback to specular conversion)
+        // Roughness (numeric value or texture)
         if let roughnessNumber = roughness.contents as? NSNumber {
             material.roughness = .init(floatLiteral: roughnessNumber.floatValue)
             hasAnyProperty = true
@@ -218,11 +218,32 @@ public extension SCNMaterial {
                 hasAnyProperty = true
                 print("  ✓ Applied roughness (texture)")
             }
-        } else if let specularNumber = specular.contents as? NSNumber {
+        }
+        
+        // Specular (numeric value or texture)
+        if let specularNumber = specular.contents as? NSNumber {
             material.specular = .init(floatLiteral: specularNumber.floatValue)
-            material.roughness = .init(floatLiteral: 1 - specularNumber.floatValue)
             hasAnyProperty = true
-            print("  ✓ Applied specular value: \(specularNumber.floatValue))")
+            print("  ✓ Applied specular value: \(specularNumber.floatValue)")
+        } else if let cgImage = specular.cgImage {
+            if let textureResource = try? TextureResource(image: cgImage, options: .init(semantic: .raw)) {
+                material.specular = .init(texture: .init(textureResource))
+                hasAnyProperty = true
+                print("  ✓ Applied specular (texture)")
+            }
+        }
+        
+        // Reflective (from COLLADA reflectivity)
+        if let reflectivityNumber = reflective.contents as? NSNumber {
+            material.clearcoat = .init(floatLiteral: reflectivityNumber.floatValue)
+            hasAnyProperty = true
+            print("  ✓ Applied clearcoat from reflectivity: \(reflectivityNumber.floatValue)")
+        } else if let cgImage = reflective.cgImage {
+            if let textureResource = try? TextureResource(image: cgImage, options: .init(semantic: .raw)) {
+                material.clearcoat = .init(texture: .init(textureResource))
+                hasAnyProperty = true
+                print("  ✓ Applied clearcoat (texture)")
+            }
         }
         
         // Metallic (numeric value or texture)

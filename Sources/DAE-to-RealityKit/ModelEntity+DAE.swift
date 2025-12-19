@@ -10,6 +10,34 @@ import RealityKit
 import SceneKit
 
 public extension ModelEntity {
+    @MainActor
+    static func fromMDLAsset(
+        data: Data
+    ) async -> ModelEntity? {
+        // Create temporary file URL
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+
+        do {
+            // Write data to temporary file
+            try data.write(to: tempURL)
+
+            // Load using existing URL-based method
+            let entity = await ModelEntity.fromDAEAsset(url: tempURL)
+
+            // Clean up temporary file
+            try? FileManager.default.removeItem(at: tempURL)
+
+            return entity
+        } catch {
+            print("Error in fromDAEAsset(data:): \(error.localizedDescription)")
+            
+            // Cleanup on error
+            try? FileManager.default.removeItem(at: tempURL)
+            return nil
+        }
+    }
+    
     /// Create a ModelEntity from a DAE (COLLADA) file at the specified URL
     /// - Parameter url: The URL to the .dae file (can be a file URL, bundle resource, etc.)
     /// - Returns: A ModelEntity if the file was successfully loaded and converted, nil otherwise

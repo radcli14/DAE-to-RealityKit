@@ -220,6 +220,7 @@ public extension SCNMaterial {
             }
         } else if let specularNumber = specular.contents as? NSNumber {
             material.specular = .init(floatLiteral: specularNumber.floatValue)
+            material.roughness = .init(floatLiteral: 1 - specularNumber.floatValue)
             hasAnyProperty = true
             print("  ✓ Applied specular value: \(specularNumber.floatValue))")
         }

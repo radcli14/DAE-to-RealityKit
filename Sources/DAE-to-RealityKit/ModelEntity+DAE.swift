@@ -183,12 +183,61 @@ public extension SCNGeometry {
 public extension SCNMaterial {
     @MainActor var rkMaterial: PhysicallyBasedMaterial? {
         var material = PhysicallyBasedMaterial()
+        var hasAnyProperty = false
         
+        // Base Color (from diffuse property)
         if let color = diffuse.uiColor {
             material.baseColor = .init(tint: color)
-        } /*else if let image = diffuse.uiImage {
-            material.baseColor = .init(texture: .init(<#T##resource: TextureResource##TextureResource#>)
-        }*/
+            hasAnyProperty = true
+            print("  ✓ Applied base color (solid)")
+        } else if let cgImage = diffuse.cgImage {
+            if let textureResource = try? TextureResource(image: cgImage, options: .init(semantic: .color)) {
+                material.baseColor = .init(texture: .init(textureResource))
+                hasAnyProperty = true
+                print("  ✓ Applied base color (texture)")
+            }
+        }
+        
+        // Normal Map
+        if let cgImage = normal.cgImage {
+            if let textureResource = try? TextureResource(image: cgImage, options: .init(semantic: .normal)) {
+                material.normal = .init(texture: .init(textureResource))
+                hasAnyProperty = true
+                print("  ✓ Applied normal map")
+            }
+        }
+        
+        // Roughness (numeric value or texture)
+        if let roughnessNumber = roughness.contents as? NSNumber {
+            material.roughness = .init(floatLiteral: roughnessNumber.floatValue)
+            hasAnyProperty = true
+            print("  ✓ Applied roughness value: \(roughnessNumber.floatValue)")
+        } else if let cgImage = roughness.cgImage {
+            if let textureResource = try? TextureResource(image: cgImage, options: .init(semantic: .raw)) {
+                material.roughness = .init(texture: .init(textureResource))
+                hasAnyProperty = true
+                print("  ✓ Applied roughness (texture)")
+            }
+        }
+        
+        // Metallic (numeric value or texture)
+        if let metallicNumber = metalness.contents as? NSNumber {
+            material.metallic = .init(floatLiteral: metallicNumber.floatValue)
+            hasAnyProperty = true
+            print("  ✓ Applied metallic value: \(metallicNumber.floatValue)")
+        } else if let cgImage = metalness.cgImage {
+            if let textureResource = try? TextureResource(image: cgImage, options: .init(semantic: .raw)) {
+                material.metallic = .init(texture: .init(textureResource))
+                hasAnyProperty = true
+                print("  ✓ Applied metallic (texture)")
+            }
+        }
+        
+        // Return nil if no properties were set
+        guard hasAnyProperty else {
+            print("  ⚠️ No material properties found, returning nil")
+            return nil
+        }
         
         return material
     }
@@ -203,8 +252,20 @@ public extension SCNMaterialProperty {
     var uiImage: UIImage? {
         contents as? UIImage
     }
+    
+    var cgImage: CGImage? {
+        uiImage?.cgImage
+    }
+}
+
+public extension UIImage {
+    var cgImage: CGImage? {
+        // UIImage already has a cgImage property
+        return self.cgImage
+    }
 }
 #endif
+
 #if os(macOS)
 public extension SCNMaterialProperty {
     var uiColor: NSColor? {
@@ -213,6 +274,18 @@ public extension SCNMaterialProperty {
     
     var uiImage: NSImage? {
         contents as? NSImage
+    }
+    
+    var cgImage: CGImage? {
+        uiImage?.cgImage
+    }
+}
+
+public extension NSImage {
+    var cgImage: CGImage? {
+        // NSImage doesn't have a direct cgImage property, so we need to extract it
+        var imageRect = CGRect(x: 0, y: 0, width: size.width, height: size.height)
+        return cgImage(forProposedRect: &imageRect, context: nil, hints: nil)
     }
 }
 #endif

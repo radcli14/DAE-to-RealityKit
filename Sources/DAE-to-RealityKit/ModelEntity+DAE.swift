@@ -11,7 +11,7 @@ import SceneKit
 
 public extension ModelEntity {
     @MainActor
-    static func fromMDLAsset(
+    static func fromDAEAsset(
         data: Data
     ) async -> ModelEntity? {
         // Create temporary file URL

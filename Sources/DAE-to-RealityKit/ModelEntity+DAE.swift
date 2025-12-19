@@ -194,7 +194,7 @@ public extension SCNMaterial {
     }
 }
 
-#if os(ios)
+#if os(iOS)
 public extension SCNMaterialProperty {
     var uiColor: UIColor? {
         contents as? UIColor

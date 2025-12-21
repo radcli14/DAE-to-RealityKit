@@ -17,6 +17,7 @@ public extension ModelEntity {
         // Create temporary file URL
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("dae")
 
         do {
             // Write data to temporary file

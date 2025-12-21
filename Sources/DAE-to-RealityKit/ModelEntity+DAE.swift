@@ -31,7 +31,7 @@ public extension ModelEntity {
 
             return entity
         } catch {
-            print("Error in fromDAEAsset(data:): \(error.localizedDescription)")
+            print("Error in fromDAEAsset(data:): \(error)")
             
             // Cleanup on error
             try? FileManager.default.removeItem(at: tempURL)
@@ -52,7 +52,7 @@ public extension ModelEntity {
             // Convert the scene to a ModelEntity
             return await fromSCNScene(scene)
         } catch {
-            print("❌ Failed to load DAE file: \(error.localizedDescription)")
+            print("❌ Failed to load DAE file: \(error)")
             return nil
         }
     }

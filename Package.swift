@@ -26,7 +26,8 @@ let package = Package(
             name: "DAE-to-RealityKitTests",
             dependencies: ["DAE-to-RealityKit"],
             resources: [
-                .process("shiny.dae")
+                .process("shiny.dae"),
+                .process("anymal_base.dae")
             ]
         ),
     ]

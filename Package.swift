@@ -24,7 +24,10 @@ let package = Package(
         ),
         .testTarget(
             name: "DAE-to-RealityKitTests",
-            dependencies: ["DAE-to-RealityKit"]
+            dependencies: ["DAE-to-RealityKit"],
+            resources: [
+                .process("shiny.dae")
+            ]
         ),
     ]
 )

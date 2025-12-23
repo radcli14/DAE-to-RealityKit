@@ -14,15 +14,28 @@ public extension ModelEntity {
     static func fromDAEAsset(
         data: Data
     ) async -> ModelEntity? {
-        // Create temporary file URL
-        let tempURL = FileManager.default.temporaryDirectory
+        print("🔍 Loading DAE from data (\(data.count) bytes)")
+        
+        // Since SCNScene requires a URL, we need to write to a temporary file
+        // Use a file URL in the caches directory which has proper sandbox access
+        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let tempURL = cacheDir
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("dae")
 
         do {
             // Write data to temporary file
+            // Don't use .atomic option as it can cause permission issues in sandboxed apps
             try data.write(to: tempURL)
-
+            
+            print("📝 Wrote temporary file to: \(tempURL.path)")
+            
+            // Verify file was written successfully
+            guard FileManager.default.fileExists(atPath: tempURL.path) else {
+                print("❌ Temporary file does not exist after write")
+                return nil
+            }
+            
             // Load using existing URL-based method
             let entity = await ModelEntity.fromDAEAsset(url: tempURL)
 
@@ -31,7 +44,7 @@ public extension ModelEntity {
 
             return entity
         } catch {
-            print("Error in fromDAEAsset(data:): \(error)")
+            print("❌ Error writing temporary file: \(error)")
             
             // Cleanup on error
             try? FileManager.default.removeItem(at: tempURL)

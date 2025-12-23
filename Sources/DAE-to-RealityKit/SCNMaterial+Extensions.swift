@@ -15,6 +15,7 @@ public extension SCNMaterial {
         var hasAnyProperty = false
         
         // Debug: Print all material property contents
+        /*
         print("  🔍 Material Debug Info:")
         print("    diffuse.contents: \(String(describing: diffuse.contents))")
         print("    specular.contents: \(String(describing: specular.contents))")
@@ -30,7 +31,7 @@ public extension SCNMaterial {
         print("    shininess: \(shininess)")
         print("    transparency: \(transparency)")
         print("    lightingModel: \(lightingModel.rawValue)")
-        
+        */
         // Base Color (from diffuse property)
         if let color = diffuse.uiColor {
             material.baseColor = .init(tint: color)

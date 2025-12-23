@@ -20,15 +20,4 @@ public extension SCNNode {
         }
         return result
     }
-    
-    /// Debug method to print the node hierarchy
-    func unpack(indent: String = "") {
-        print("\(indent)📦 Node: \(name ?? "unnamed")")
-        if let geometry = geometry {
-            print("\(indent)  └─ Geometry: \(geometry.name ?? "unnamed"), \(geometry.elements.count) elements")
-        }
-        for child in childNodes {
-            child.unpack(indent: indent + "  ")
-        }
-    }
 }

@@ -10,25 +10,7 @@ import RealityKit
 import SceneKit
 
 public extension SCNGeometry {
-    func unpack() {
-        elements.enumerated().forEach { i, element in
-            print("  * geometry.elements[\(i)]:", element)
-            //print("  * element.primitives:", element.primitives)
-            print("    > element.primitiveCount:", element.primitiveCount)
-            print("    > element.primitiveType:", element.primitiveType)
-            print("    > element.bytesPerIndex:", element.bytesPerIndex)
-            print("    > element.indicesChannelCount:", element.indicesChannelCount)
-            
-        }
-        /*sources.enumerated().forEach { i, source in
-            print("  sources[\(i)]:", source)
-            
-        }*/
-        print("  * sources.vertices?.count:", sources.vertices?.count ?? 0)
-        print("  * sources.normals?.count:", sources.normals?.count ?? 0)
-        print("  * sources.textureCoordinates?.count:", sources.textureCoordinates?.count ?? 0)
-    }
-    
+
     /// An array of `MeshDescriptor` derived from the `positions` array and primitive indices contained in the `submeshes`
     @MainActor var descriptors: [MeshDescriptor] {
         

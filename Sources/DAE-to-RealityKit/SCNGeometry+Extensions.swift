@@ -73,11 +73,11 @@ public extension SCNGeometry {
     @MainActor var rkMaterials: [PhysicallyBasedMaterial] {
         materials.compactMap { $0.rkMaterial }
     }
-    
-    // TODO: I don't like the wrappers below, but it was a correction for "sending self.materials risks causing data races"
+}
 
-    /// Wrapper to make non-Sendable descriptors transferable across actor boundaries
-    private struct UnsafeSendableDescriptors: @unchecked Sendable {
-        let descriptors: [MeshDescriptor]
-    }
+// TODO: I don't like the wrappers below, but it was a correction for "sending self.materials risks causing data races"
+
+/// Wrapper to make non-Sendable descriptors transferable across actor boundaries
+struct UnsafeSendableDescriptors: @unchecked Sendable {
+    let descriptors: [MeshDescriptor]
 }

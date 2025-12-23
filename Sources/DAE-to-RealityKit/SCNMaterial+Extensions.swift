@@ -73,6 +73,14 @@ public extension SCNMaterial {
                 hasAnyProperty = true
                 print("  ✓ Applied roughness (texture)")
             }
+        } else if shininess > 0 {
+            // Try using shininess as a fallback for specular/roughness
+            // Shininess typically ranges from 0-128, convert it to a normalized smoothness property
+            let smoothness = min(shininess / 128.0, 1.0)
+            let roughnessValue = 1.0 - Float(smoothness * smoothness)
+            material.roughness = .init(floatLiteral: roughnessValue)
+            hasAnyProperty = true
+            print("  ✓ Applied roughness from shininess: \(roughnessValue) (shininess: \(shininess))")
         }
         
         // Specular (numeric value, color, or texture)
@@ -133,17 +141,6 @@ public extension SCNMaterial {
                 hasAnyProperty = true
                 print("  ✓ Applied metallic (texture)")
             }
-        }
-        
-        // Try using shininess as a fallback for specular/roughness
-        if shininess > 0 {
-            // Shininess typically ranges from 0-1000+, normalize it
-            // Higher shininess = lower roughness
-            let normalizedShininess = min(shininess / 1000.0, 1.0)
-            let roughnessValue = 1.0 - Float(normalizedShininess)
-            material.roughness = .init(floatLiteral: roughnessValue)
-            hasAnyProperty = true
-            print("  ✓ Applied roughness from shininess: \(roughnessValue) (shininess: \(shininess))")
         }
         
         // Return nil if no properties were set

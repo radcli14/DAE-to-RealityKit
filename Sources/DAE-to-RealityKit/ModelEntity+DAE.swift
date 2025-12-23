@@ -18,14 +18,24 @@ public extension ModelEntity {
         
         // Since SCNScene requires a URL, we need to write to a temporary file
         // Use a file URL in the caches directory which has proper sandbox access
-        let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        guard let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+            print("❌ Could not access caches directory")
+            return nil
+        }
+        
         let tempURL = cacheDir
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("dae")
 
         do {
+            // Ensure the caches directory exists
+            try FileManager.default.createDirectory(
+                at: cacheDir,
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+            
             // Write data to temporary file
-            // Don't use .atomic option as it can cause permission issues in sandboxed apps
             try data.write(to: tempURL)
             
             print("📝 Wrote temporary file to: \(tempURL.path)")

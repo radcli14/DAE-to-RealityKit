@@ -16,50 +16,14 @@ public extension ModelEntity {
     ) async -> ModelEntity? {
         print("🔍 Loading DAE from data (\(data.count) bytes)")
         
-        // Since SCNScene requires a URL, we need to write to a temporary file
-        // Use a file URL in the caches directory which has proper sandbox access
-        guard let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            print("❌ Could not access caches directory")
-            return nil
-        }
+        let source = SCNSceneSource(data: data, options: [
+            SCNSceneSource.LoadingOption.checkConsistency: true
+        ])
         
-        let tempURL = cacheDir
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("dae")
-
-        do {
-            // Ensure the caches directory exists
-            try FileManager.default.createDirectory(
-                at: cacheDir,
-                withIntermediateDirectories: true,
-                attributes: nil
-            )
-            
-            // Write data to temporary file
-            try data.write(to: tempURL)
-            
-            print("📝 Wrote temporary file to: \(tempURL.path)")
-            
-            // Verify file was written successfully
-            guard FileManager.default.fileExists(atPath: tempURL.path) else {
-                print("❌ Temporary file does not exist after write")
-                return nil
-            }
-            
-            // Load using existing URL-based method
-            let entity = await ModelEntity.fromDAEAsset(url: tempURL)
-
-            // Clean up temporary file
-            try? FileManager.default.removeItem(at: tempURL)
-
-            return entity
-        } catch {
-            print("❌ Error writing temporary file: \(error)")
-            
-            // Cleanup on error
-            try? FileManager.default.removeItem(at: tempURL)
-            return nil
-        }
+        guard let scene = source?.scene(options: nil) else { return nil }
+        print("    - Scene (from source):", scene)
+        
+        return await ModelEntity.fromSCNScene(scene)
     }
     
     /// Create a ModelEntity from a DAE (COLLADA) file at the specified URL
@@ -75,6 +39,10 @@ public extension ModelEntity {
             // Convert the scene to a ModelEntity
             return await fromSCNScene(scene)
         } catch {
+            // Attempt a fallback to using the data directly
+            if let data = try? Data(contentsOf: url) {
+                return await ModelEntity.fromDAEAsset(data: data)
+            }
             print("❌ Failed to load DAE file: \(error)")
             return nil
         }

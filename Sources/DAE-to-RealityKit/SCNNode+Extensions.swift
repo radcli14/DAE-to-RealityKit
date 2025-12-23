@@ -20,9 +20,8 @@ public extension SCNNode {
             result.append(self)
         }
         
-        // Create a copy of the childNodes array to avoid issues with concurrent modification
-        let children = Array(childNodes)
-        for child in children {
+        // Get child geometry nodes
+        for child in childNodes {
             result.append(contentsOf: child.geometryNodes)
         }
         

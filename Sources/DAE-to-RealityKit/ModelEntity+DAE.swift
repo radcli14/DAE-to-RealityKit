@@ -51,23 +51,10 @@ public extension ModelEntity {
     /// Create a ModelEntity from an SCNScene (such as one loaded from a .dae file)
     @MainActor
     static func fromSCNScene(_ scene: SCNScene) async -> ModelEntity? {
-        let rootNode = scene.rootNode
+
         print("🔍 Converting SCNScene to ModelEntity...")
 
-        // Get all geometry nodes from the scene
-        let geometryNodes = rootNode.geometryNodes
-        guard !geometryNodes.isEmpty else {
-            print("⚠️ No geometry found in scene")
-            return nil
-        }
-        
-        print("📦 Found \(geometryNodes.count) geometry node(s)")
-        
-        // For now, let's handle the first geometry node
-        // TODO: Combine multiple geometries into a single entity
-        guard let firstGeometry = geometryNodes.first?.geometry else { return nil }
-        
-        guard let meshResource = await firstGeometry.getMeshResource() else {
+        guard let meshResource = await scene.rootNode.getMeshResource() else {
             print("❌ Failed to create mesh resource")
             return nil
         }
@@ -76,7 +63,7 @@ public extension ModelEntity {
         
         return ModelEntity(
             mesh: meshResource,
-            materials: firstGeometry.rkMaterials
+            materials: scene.rootNode.rkMaterials
         )
     }
 }

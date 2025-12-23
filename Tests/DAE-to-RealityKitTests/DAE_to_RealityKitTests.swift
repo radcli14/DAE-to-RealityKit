@@ -7,7 +7,7 @@ import Foundation
 
 @Test func testLoadDaeFromData() async throws {
     // Get the URL of a test .dae file in the test bundle
-    guard let url = Bundle.module.url(forResource: "shiny", withExtension: "dae") else {
+    guard let url = Bundle.module.url(forResource: "anymal_base", withExtension: "dae") else {
         Issue.record("Failed to get URL for test resource")
         return
     }
@@ -37,7 +37,7 @@ import Foundation
 
 @Test func testLoadDaeFromURL() async throws {
     // Get the URL of a test .dae file in the test bundle
-    guard let url = Bundle.module.url(forResource: "shiny", withExtension: "dae") else {
+    guard let url = Bundle.module.url(forResource: "anymal_base", withExtension: "dae") else {
         Issue.record("Failed to get URL for test resource")
         return
     }

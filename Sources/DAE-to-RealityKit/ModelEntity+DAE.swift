@@ -51,19 +51,7 @@ public extension ModelEntity {
     /// Create a ModelEntity from an SCNScene (such as one loaded from a .dae file)
     @MainActor
     static func fromSCNScene(_ scene: SCNScene) async -> ModelEntity? {
-
         print("🔍 Converting SCNScene to ModelEntity...")
-
-        guard let meshResource = await scene.rootNode.getMeshResource() else {
-            print("❌ Failed to create mesh resource")
-            return nil
-        }
-        
-        print("✅ Successfully created mesh resource")
-        
-        return ModelEntity(
-            mesh: meshResource,
-            materials: scene.rootNode.rkMaterials
-        )
+        return await scene.rootNode.getModelEntity()
     }
 }

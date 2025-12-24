@@ -29,25 +29,7 @@ public extension SCNNode {
     }
     
     // - MARK: RealityKit
-    
-    /*var descriptors: [MeshDescriptor] {
-        geometryNodes.flatMap { $0.descriptors }
-    }
-    
-    var rkMaterials: [PhysicallyBasedMaterial] {
-        geometryNodes.flatMap { $0.rkMaterials }
-    }
-    
-    func getMeshResource() async -> MeshResource? {
-        do {
-            let sendableDescriptors = UnsafeSendableDescriptors(descriptors: descriptors)
-            return try await MeshResource(from: sendableDescriptors.descriptors)
-        } catch {
-            print("SCNGeometry.getMeshResource() failed because \(error.localizedDescription)")
-            return nil
-        }
-    }*/
-    
+
     func getModelEntity(recursive: Bool = true) async -> ModelEntity {
         // Build this entity
         var entity: ModelEntity
@@ -64,6 +46,9 @@ public extension SCNNode {
         entity.transform.translation = self.simdPosition
         entity.transform.rotation = self.simdOrientation
         entity.transform.scale = self.simdScale
+        
+        // Early return if not in recursive mode
+        guard recursive else { return entity }
         
         // Add child entities
         for node in childNodes {

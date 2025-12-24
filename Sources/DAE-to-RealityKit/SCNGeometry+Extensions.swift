@@ -15,13 +15,13 @@ public extension SCNGeometry {
     @MainActor var descriptors: [MeshDescriptor] {
         
         // Get the computed properties first, so they aren't computed multiple times inside the map
-        guard let positions = sources.vertices,
-              let textureCoordinates = sources.textureCoordinates,
-              let normals = sources.normals
+        guard let positions = sources.vertices
         else {
-            print("⚠️ Missing required geometry sources")
+            print("⚠️ Missing required geometry vertices")
             return []
         }
+        let textureCoordinates = sources.textureCoordinates
+        let normals = sources.normals
 
         print("📊 Geometry has \(positions.count) vertices, \(elements.count) elements")
         
@@ -34,16 +34,16 @@ public extension SCNGeometry {
             print("  Element[\(index)]: \(element.primitiveCount) primitives")
             
             // Make sure the coordinates and normals are dimensionally consistent with the positions
-            if textureCoordinates.count == positions.count {
+            if let textureCoordinates, textureCoordinates.count == positions.count {
                 descriptor.textureCoordinates = .init(textureCoordinates)
             } else {
-                print("  ⚠️ Texture coordinate count (\(textureCoordinates.count)) doesn't match vertex count (\(positions.count))")
+                print("  ⚠️ Texture coordinate count (\(textureCoordinates?.count ?? 0)) doesn't match vertex count (\(positions.count))")
             }
             
-            if normals.count == positions.count {
+            if let normals, normals.count == positions.count {
                 descriptor.normals = .init(normals)
             } else {
-                print("  ⚠️ Normal count (\(normals.count)) doesn't match vertex count (\(positions.count))")
+                print("  ⚠️ Normal count (\(normals?.count ?? 0)) doesn't match vertex count (\(positions.count))")
             }
             
             // Add primitives from the submesh

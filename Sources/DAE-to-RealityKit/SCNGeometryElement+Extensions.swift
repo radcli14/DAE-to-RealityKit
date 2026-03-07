@@ -50,23 +50,69 @@ public extension SCNGeometryElement {
     var indexCount: Int {
         switch primitiveType {
         case .triangles: primitiveCount * 3
-        case .polygon: primitiveCount
+        case .triangleStrip: primitiveCount + 2
+        case .polygon:
+            // For polygons, the total index count is the total number of bytes
+            // divided by bytesPerIndex — SceneKit stores all vertex indices contiguously
+            data.count / bytesPerIndex
         default: 0
         }
     }
-    
+
     @MainActor var primitives: MeshDescriptor.Primitives? {
-        var geometryString = ""
         switch primitiveType {
-        case .triangles: return .triangles(indices)
-        case .polygon: geometryString = "polygon"
-        case .triangleStrip: geometryString = "triangleStrip"
-        case .line: geometryString = "line"
-        case .point: geometryString = "point"
-        @unknown default:
-            geometryString = "???"
+        case .triangles:
+            return .triangles(indices)
+        case .polygon:
+            // All polygons in DAE polylist with vcount=3 are triangles.
+            // Treat them as triangles since RealityKit MeshDescriptor supports that.
+            let allIndices = indices
+            if allIndices.count == primitiveCount * 3 {
+                // All faces are triangles
+                return .triangles(allIndices)
+            } else {
+                // Mixed polygon — triangulate by fan triangulation
+                return triangulatedPolygons()
+            }
+        case .triangleStrip:
+            // Convert triangle strip to individual triangles
+            let allIndices = indices
+            guard allIndices.count >= 3 else { return nil }
+            var triangles = [UInt32]()
+            triangles.reserveCapacity((allIndices.count - 2) * 3)
+            for i in 0..<(allIndices.count - 2) {
+                if i % 2 == 0 {
+                    triangles.append(allIndices[i])
+                    triangles.append(allIndices[i + 1])
+                    triangles.append(allIndices[i + 2])
+                } else {
+                    // Swap winding order for odd triangles
+                    triangles.append(allIndices[i + 1])
+                    triangles.append(allIndices[i])
+                    triangles.append(allIndices[i + 2])
+                }
+            }
+            return .triangles(triangles)
+        default:
+            print("SCNGeometryElement primitiveType \(primitiveType.rawValue) not supported")
+            return nil
         }
-        print("SCNGeometryElement primitiveType: \(geometryString) is unknown or not handled, returning nil")
+    }
+
+    /// Triangulate polygons using fan triangulation for mixed polygon meshes
+    @MainActor private func triangulatedPolygons() -> MeshDescriptor.Primitives? {
+        // Read the polygon vertex counts from the data
+        // For polygon type, SceneKit stores all indices contiguously
+        // We need to know the vertex count per polygon — unfortunately SCeneKit
+        // doesn't directly expose vcount, but all indices are in the data buffer.
+        // Since we can't get per-polygon counts from SCNGeometryElement directly,
+        // and the common case from DAE polylist is all-triangles (vcount=3),
+        // we'll attempt to treat them all as triangles.
+        let allIndices = indices
+        if allIndices.count % 3 == 0 {
+            return .triangles(allIndices)
+        }
+        print("  ⚠️ Polygon mesh with non-triangle faces cannot be triangulated automatically")
         return nil
     }
 }

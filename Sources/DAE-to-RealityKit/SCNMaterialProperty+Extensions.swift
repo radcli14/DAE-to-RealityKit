@@ -12,22 +12,20 @@ import SceneKit
 #if os(iOS)
 public extension SCNMaterialProperty {
     var uiColor: UIColor? {
-        contents as? UIColor
+        if let color = contents as? UIColor {
+            return color
+        } else if let obj = contents as AnyObject?, CFGetTypeID(obj) == CGColor.typeID {
+            return UIColor(cgColor: obj as! CGColor)
+        }
+        return nil
     }
-    
+
     var uiImage: UIImage? {
         contents as? UIImage
     }
-    
+
     var cgImage: CGImage? {
         uiImage?.cgImage
-    }
-}
-
-public extension UIImage {
-    var cgImage: CGImage? {
-        // UIImage already has a cgImage property
-        return self.cgImage
     }
 }
 #endif
@@ -35,23 +33,24 @@ public extension UIImage {
 #if os(macOS)
 public extension SCNMaterialProperty {
     var uiColor: NSColor? {
-        contents as? NSColor
+        if let color = contents as? NSColor {
+            return color
+        } else if let obj = contents as AnyObject?, CFGetTypeID(obj) == CGColor.typeID {
+            return NSColor(cgColor: obj as! CGColor)
+        }
+        return nil
     }
-    
+
     var uiImage: NSImage? {
         contents as? NSImage
     }
-    
-    var cgImage: CGImage? {
-        uiImage?.cgImage
-    }
-}
 
-public extension NSImage {
     var cgImage: CGImage? {
-        // NSImage doesn't have a direct cgImage property, so we need to extract it
-        var imageRect = CGRect(x: 0, y: 0, width: size.width, height: size.height)
-        return cgImage(forProposedRect: &imageRect, context: nil, hints: nil)
+        if let nsImage = uiImage {
+            var imageRect = CGRect(x: 0, y: 0, width: nsImage.size.width, height: nsImage.size.height)
+            return nsImage.cgImage(forProposedRect: &imageRect, context: nil, hints: nil)
+        }
+        return nil
     }
 }
 #endif

@@ -33,17 +33,18 @@ public extension SCNGeometry {
             
             print("  Element[\(index)]: \(element.primitiveCount) primitives")
             
-            // Make sure the coordinates and normals are dimensionally consistent with the positions
+            // Apply texture coordinates if available and dimensionally consistent
             if let textureCoordinates, textureCoordinates.count == positions.count {
                 descriptor.textureCoordinates = .init(textureCoordinates)
-            } else {
-                print("  ⚠️ Texture coordinate count (\(textureCoordinates?.count ?? 0)) doesn't match vertex count (\(positions.count))")
+            } else if let textureCoordinates, !textureCoordinates.isEmpty {
+                print("  ⚠️ Texture coordinate count (\(textureCoordinates.count)) doesn't match vertex count (\(positions.count)), skipping")
             }
-            
+
+            // Apply normals if available and dimensionally consistent
             if let normals, normals.count == positions.count {
                 descriptor.normals = .init(normals)
-            } else {
-                print("  ⚠️ Normal count (\(normals?.count ?? 0)) doesn't match vertex count (\(positions.count))")
+            } else if let normals, !normals.isEmpty {
+                print("  ⚠️ Normal count (\(normals.count)) doesn't match vertex count (\(positions.count)), skipping")
             }
             
             // Add primitives from the submesh
@@ -70,8 +71,18 @@ public extension SCNGeometry {
         }
     }
     
-    @MainActor var rkMaterials: [PhysicallyBasedMaterial] {
-        materials.compactMap { $0.rkMaterial }
+    @MainActor var rkMaterials: [RealityKit.Material] {
+        let converted = materials.compactMap { $0.rkMaterial }
+        if converted.isEmpty && !materials.isEmpty {
+            // Fallback: return a default material so the mesh is visible
+            print("  ⚠️ No materials converted successfully, using default material")
+            var fallback = PhysicallyBasedMaterial()
+            fallback.baseColor = .init(tint: .gray)
+            fallback.roughness = .init(floatLiteral: 0.5)
+            fallback.metallic = .init(floatLiteral: 0.0)
+            return [fallback]
+        }
+        return converted
     }
 }
 

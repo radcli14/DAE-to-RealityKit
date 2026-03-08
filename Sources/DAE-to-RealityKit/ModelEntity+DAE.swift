@@ -11,91 +11,145 @@ import SceneKit
 
 public struct DAEImportOptions: Sendable {
     public enum Loader: Sendable {
+        /// Use SceneKit to load (works for bundle-compiled SCN/DAE files)
         case sceneKit
+        /// Use the custom XMLCoder-based COLLADA parser (works for raw XML DAE files)
         case custom
+        /// Auto-detect: inspect the data to choose the right parser, with fallback
+        case auto
     }
     public var loader: Loader
-    public init(loader: Loader = .sceneKit) { self.loader = loader }
+    public init(loader: Loader = .auto) { self.loader = loader }
 }
 
 public extension ModelEntity {
+
+    /// Create a ModelEntity from DAE data bytes
     @MainActor
     static func fromDAEAsset(
         data: Data,
         options: DAEImportOptions = .init()
     ) async -> ModelEntity? {
-        print("🔍 Loading DAE from data (\(data.count) bytes)")
-        
-        switch options.loader {
+        let loader = options.loader == .auto ? detectLoader(for: data) : options.loader
+        print("Loading DAE from data (\(data.count) bytes) with \(loader) loader")
+
+        switch loader {
         case .custom:
-            // TODO: Implement custom COLLADA parser path using XMLCoder
-            // Placeholder for upcoming RawScene -> ModelEntity conversion
-            return await ModelEntity.fromCustomDAEData(data)
-        case .sceneKit:
-            break
+            let result = await fromCustomDAEData(data)
+            if result != nil { return result }
+            // Fallback to SceneKit if custom parser failed and caller used auto
+            if options.loader == .auto {
+                print("Custom parser failed, falling back to SceneKit")
+                return await fromSceneKitData(data)
+            }
+            return nil
+
+        case .sceneKit, .auto:
+            let result = await fromSceneKitData(data)
+            if result != nil { return result }
+            // Fallback to custom parser if SceneKit failed and caller used auto
+            if options.loader == .auto {
+                print("SceneKit failed, falling back to custom parser")
+                return await fromCustomDAEData(data)
+            }
+            return nil
         }
-        
+    }
+
+    /// Create a ModelEntity from a DAE (COLLADA) file at the specified URL.
+    /// Works with bundle resources (Xcode-compiled SCN) and raw XML DAE files.
+    @MainActor
+    static func fromDAEAsset(url: URL, options: DAEImportOptions = .init()) async -> ModelEntity? {
+        print("Loading DAE file from: \(url.path)")
+
+        // If explicitly custom, go straight to data-based parsing
+        if options.loader == .custom {
+            guard let data = try? Data(contentsOf: url) else {
+                print("Failed to read data from: \(url.path)")
+                return nil
+            }
+            return await fromDAEAsset(data: data, options: options)
+        }
+
+        // For .sceneKit or .auto, try SCNScene(url:) first since it handles
+        // both raw DAE (macOS) and Xcode-compiled SCN transparently
+        if options.loader == .sceneKit || options.loader == .auto {
+            do {
+                let scene = try SCNScene(url: url, options: nil)
+                if let entity = await fromSCNScene(scene) {
+                    return entity
+                }
+            } catch {
+                print("SCNScene(url:) failed: \(error.localizedDescription)")
+            }
+        }
+
+        // Read data and try data-based loading (with auto-detection or explicit loader)
+        guard let data = try? Data(contentsOf: url) else {
+            print("Failed to read data from: \(url.path)")
+            return nil
+        }
+        return await fromDAEAsset(data: data, options: options)
+    }
+
+    /// Create a ModelEntity from an SCNScene (such as one loaded from a .dae file)
+    @MainActor
+    static func fromSCNScene(_ scene: SCNScene) async -> ModelEntity? {
+        return await scene.rootNode.getModelEntity()
+    }
+
+    // MARK: - Data Format Detection
+
+    /// Inspect the first bytes to determine the best loader.
+    /// - Binary plist (bplist) → Xcode-compiled SCN → use SceneKit
+    /// - XML declaration (<?xml) → raw COLLADA → use custom parser
+    private static func detectLoader(for data: Data) -> DAEImportOptions.Loader {
+        guard data.count >= 6 else { return .sceneKit }
+
+        // Binary plist: starts with "bplist"
+        let bplist: [UInt8] = [0x62, 0x70, 0x6C, 0x69, 0x73, 0x74] // "bplist"
+        let header = [UInt8](data.prefix(6))
+        if header == bplist {
+            return .sceneKit
+        }
+
+        // XML: starts with "<?xml" (possibly after a BOM)
+        if let prefix = String(data: data.prefix(64), encoding: .utf8),
+           prefix.contains("<?xml") || prefix.contains("<COLLADA") {
+            return .custom
+        }
+
+        // Unknown format, default to SceneKit
+        return .sceneKit
+    }
+
+    // MARK: - Parser Implementations
+
+    @MainActor
+    private static func fromSceneKitData(_ data: Data) async -> ModelEntity? {
         guard let source = SCNSceneSource(data: data, options: [
             SCNSceneSource.LoadingOption.checkConsistency: true
         ]) else {
-            print("❌ SCNSceneSource failed to initialize from data")
+            print("SCNSceneSource failed to initialize from data")
             return nil
         }
-        
+
         let scene: SCNScene
         do {
             scene = try source.scene(options: nil)
         } catch {
-            print("❌ SCNSceneSource.scene(options:) failed: \(error)")
+            print("SCNSceneSource.scene(options:) failed: \(error)")
             return nil
         }
-        print("    - Scene (from source):", scene)
-        
-        return await ModelEntity.fromSCNScene(scene)
-    }
-    
-    /// Create a ModelEntity from a DAE (COLLADA) file at the specified URL
-    /// - Parameter url: The URL to the .dae file (can be a file URL, bundle resource, etc.)
-    /// - Returns: A ModelEntity if the file was successfully loaded and converted, nil otherwise
-    @MainActor
-    static func fromDAEAsset(url: URL, options: DAEImportOptions = .init()) async -> ModelEntity? {
-        print("🔍 Loading DAE file from: \(url.path)")
 
-        // For the custom loader, read data and parse directly
-        if options.loader == .custom {
-            guard let data = try? Data(contentsOf: url) else {
-                print("❌ Failed to read data from: \(url.path)")
-                return nil
-            }
-            return await ModelEntity.fromDAEAsset(data: data, options: options)
-        }
+        return await fromSCNScene(scene)
+    }
 
-        do {
-            let scene = try SCNScene(url: url, options: nil)
-            return await fromSCNScene(scene)
-        } catch {
-            // Attempt a fallback to using the data directly
-            if let data = try? Data(contentsOf: url) {
-                return await ModelEntity.fromDAEAsset(data: data, options: options)
-            }
-            print("❌ Failed to load DAE file: \(error)")
-            return nil
-        }
-    }
-    
-    /// Create a ModelEntity from an SCNScene (such as one loaded from a .dae file)
-    @MainActor
-    static func fromSCNScene(_ scene: SCNScene) async -> ModelEntity? {
-        print("🔍 Converting SCNScene to ModelEntity...")
-        return await scene.rootNode.getModelEntity()
-    }
-    
     @MainActor
     private static func fromCustomDAEData(_ data: Data) async -> ModelEntity? {
         let parser = ColladaParser()
         do {
             let raw = try parser.parse(data: data)
-            // Build ModelEntity hierarchy from RawScene
             let root = ModelEntity()
             for node in raw.rootNodes {
                 let child = buildEntity(from: node)
@@ -103,18 +157,17 @@ public extension ModelEntity {
             }
             return root
         } catch {
-            print("❌ Custom COLLADA parse failed: \(error)")
+            print("Custom COLLADA parse failed: \(error)")
             return nil
         }
     }
-    
+
     @MainActor
     private static func buildEntity(from node: RawNode) -> ModelEntity {
         let entity = ModelEntity()
         entity.name = node.name ?? "node"
         entity.transform.matrix = node.localTransform
 
-        // Build mesh + material if this node has geometry
         if let rawMesh = node.mesh {
             do {
                 var descriptor = MeshDescriptor(name: node.name ?? "mesh")
@@ -150,4 +203,3 @@ public extension ModelEntity {
         return entity
     }
 }
-

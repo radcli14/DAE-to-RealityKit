@@ -8,6 +8,19 @@
 import Foundation
 import simd
 
+public struct RawMesh: Sendable {
+    public var positions: [SIMD3<Float>]
+    public var normals: [SIMD3<Float>]? = nil
+    public var uvs: [SIMD2<Float>]? = nil
+    public var indices: [UInt32]
+    public init(positions: [SIMD3<Float>], normals: [SIMD3<Float>]? = nil, uvs: [SIMD2<Float>]? = nil, indices: [UInt32]) {
+        self.positions = positions
+        self.normals = normals
+        self.uvs = uvs
+        self.indices = indices
+    }
+}
+
 public struct RawScene: Sendable {
     public var rootNodes: [RawNode]
     public init(rootNodes: [RawNode]) { self.rootNodes = rootNodes }
@@ -19,12 +32,14 @@ public struct RawNode: Sendable, Identifiable {
 
     public var name: String?
     public var transform: simd_float4x4
+    public var mesh: RawMesh?
     public var children: [RawNode]
     // Future: geometry refs, materials, etc.
 
-    public init(name: String?, transform: simd_float4x4, children: [RawNode] = []) {
+    public init(name: String?, transform: simd_float4x4, mesh: RawMesh? = nil, children: [RawNode] = []) {
         self.name = name
         self.transform = transform
+        self.mesh = mesh
         self.children = children
     }
 }

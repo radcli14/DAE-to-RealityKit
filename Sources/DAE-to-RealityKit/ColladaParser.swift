@@ -19,14 +19,10 @@ public struct ColladaParser {
     public func parse(data: Data) throws -> RawScene {
         let decoder = XMLDecoder()
         decoder.trimValueWhitespaces = false
-        decoder.shouldProcessNamespaces = false
-
-        // Strip the COLLADA namespace declaration which causes NSXMLParser
-        // error 111 (namespace separator) on some platforms
-        let cleanedData = Self.stripNamespace(from: data)
+        decoder.shouldProcessNamespaces = true
 
         do {
-            let collada = try decoder.decode(Collada.self, from: cleanedData)
+            let collada = try decoder.decode(Collada.self, from: data)
             let up = UpAxis.from(collada.asset?.upAxis)
             let rootTransform = AxisConversion.toYUp(from: up)
 
@@ -395,17 +391,5 @@ public struct ColladaParser {
         return result
     }
 
-    // MARK: - Namespace Stripping
-
-    /// Remove the xmlns attribute from the root <COLLADA> element to avoid
-    /// NSXMLParser error 111 on platforms where namespace handling differs.
-    private static func stripNamespace(from data: Data) -> Data {
-        guard var xml = String(data: data, encoding: .utf8) else { return data }
-        // Match xmlns="..." or xmlns='...' on the COLLADA element
-        if let range = xml.range(of: #"\s+xmlns\s*=\s*["'][^"']*["']"#, options: .regularExpression) {
-            xml.removeSubrange(range)
-        }
-        return Data(xml.utf8)
-    }
 }
 

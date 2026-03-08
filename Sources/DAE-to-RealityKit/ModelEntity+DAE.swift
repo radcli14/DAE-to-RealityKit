@@ -16,11 +16,20 @@ public extension ModelEntity {
     ) async -> ModelEntity? {
         print("🔍 Loading DAE from data (\(data.count) bytes)")
         
-        let source = SCNSceneSource(data: data, options: [
+        guard let source = SCNSceneSource(data: data, options: [
             SCNSceneSource.LoadingOption.checkConsistency: true
-        ])
+        ]) else {
+            print("❌ SCNSceneSource failed to initialize from data")
+            return nil
+        }
         
-        guard let scene = source?.scene(options: nil) else { return nil }
+        let scene: SCNScene
+        do {
+            scene = try source.scene(options: nil)
+        } catch {
+            print("❌ SCNSceneSource.scene(options:) failed: \(error)")
+            return nil
+        }
         print("    - Scene (from source):", scene)
         
         return await ModelEntity.fromSCNScene(scene)

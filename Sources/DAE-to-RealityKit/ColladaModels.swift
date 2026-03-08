@@ -8,32 +8,85 @@
 import Foundation
 import XMLCoder
 
-// MARK: - COLLADA 1.4.1 minimal schema for geometry and visual scenes
+// MARK: - Whitespace-Separated Array Wrapper Types
+
+/// Decodes a whitespace-separated string of floats (e.g. "1.0 2.0 3.0") into [Float]
+public struct FloatArray: Codable, Equatable {
+    public let id: String?
+    public let count: Int
+    public let values: [Float]
+
+    enum CodingKeys: String, CodingKey {
+        case id, count
+        case values = ""
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        count = try container.decode(Int.self, forKey: .count)
+        let text = try container.decode(String.self, forKey: .values)
+        values = text.split(whereSeparator: \.isWhitespace).compactMap { Float($0) }
+    }
+}
+
+extension FloatArray: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "id", "count": return .attribute
+        default: return .element
+        }
+    }
+}
+
+/// Decodes a whitespace-separated string of integers (e.g. "0 1 2 3") into [Int]
+public struct IndexArray: Codable, Equatable {
+    public let values: [Int]
+
+    enum CodingKeys: String, CodingKey {
+        case values = ""
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let text = try container.decode(String.self, forKey: .values)
+        values = text.split(whereSeparator: \.isWhitespace).compactMap { Int($0) }
+    }
+}
+
+// MARK: - COLLADA 1.4.1 Schema
 
 public struct Collada: Codable, Equatable {
     public let version: String?
     public let asset: Asset?
+    public let libraryEffects: LibraryEffects?
+    public let libraryMaterials: LibraryMaterials?
     public let libraryGeometries: LibraryGeometries?
     public let libraryVisualScenes: LibraryVisualScenes?
     public let scene: Scene?
 
     enum CodingKeys: String, CodingKey {
-        case version = "version"
-        case asset = "asset"
+        case version
+        case asset
+        case libraryEffects = "library_effects"
+        case libraryMaterials = "library_materials"
         case libraryGeometries = "library_geometries"
         case libraryVisualScenes = "library_visual_scenes"
-        case scene = "scene"
+        case scene
     }
 }
 
 extension Collada: DynamicNodeDecoding {
     public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
-        // Default element decoding
-        return .element
+        switch key.stringValue {
+        case "version": return .attribute
+        default: return .element
+        }
     }
 }
 
-// MARK: Asset
+// MARK: - Asset
+
 public struct Asset: Codable, Equatable {
     public let upAxis: String?
 
@@ -42,7 +95,8 @@ public struct Asset: Codable, Equatable {
     }
 }
 
-// MARK: Scene binding
+// MARK: - Scene Binding
+
 public struct Scene: Codable, Equatable {
     public let instanceVisualScene: InstanceVisualScene?
 
@@ -53,13 +107,168 @@ public struct Scene: Codable, Equatable {
 
 public struct InstanceVisualScene: Codable, Equatable {
     public let url: String
+}
+
+extension InstanceVisualScene: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        return .attribute
+    }
+}
+
+// MARK: - Effects
+
+public struct LibraryEffects: Codable, Equatable {
+    public let effects: [Effect]?
 
     enum CodingKeys: String, CodingKey {
-        case url = "url"
+        case effects = "effect"
+    }
+}
+
+public struct Effect: Codable, Equatable {
+    public let effectId: String?
+    public let profileCommon: ProfileCommon?
+
+    enum CodingKeys: String, CodingKey {
+        case effectId = "id"
+        case profileCommon = "profile_COMMON"
+    }
+}
+
+extension Effect: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "id": return .attribute
+        default: return .element
+        }
+    }
+}
+
+public struct ProfileCommon: Codable, Equatable {
+    public let technique: EffectTechnique?
+
+    enum CodingKeys: String, CodingKey {
+        case technique
+    }
+}
+
+public struct EffectTechnique: Codable, Equatable {
+    public let sid: String?
+    public let phong: PhongShading?
+    public let lambert: LambertShading?
+    public let blinn: BlinnShading?
+
+    enum CodingKeys: String, CodingKey {
+        case sid, phong, lambert, blinn
+    }
+
+    /// Returns the diffuse color from whichever shading model is present
+    public var diffuseColor: ColorRGBA? {
+        phong?.diffuse?.color ?? lambert?.diffuse?.color ?? blinn?.diffuse?.color
+    }
+}
+
+extension EffectTechnique: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "sid": return .attribute
+        default: return .element
+        }
+    }
+}
+
+public struct PhongShading: Codable, Equatable {
+    public let diffuse: ColorProperty?
+}
+
+public struct LambertShading: Codable, Equatable {
+    public let diffuse: ColorProperty?
+}
+
+public struct BlinnShading: Codable, Equatable {
+    public let diffuse: ColorProperty?
+}
+
+public struct ColorProperty: Codable, Equatable {
+    public let color: ColorRGBA?
+}
+
+/// Decodes a whitespace-separated "R G B A" string into individual components
+public struct ColorRGBA: Codable, Equatable, Sendable {
+    public let r: Float
+    public let g: Float
+    public let b: Float
+    public let a: Float
+
+    enum CodingKeys: String, CodingKey {
+        case value = ""
+    }
+
+    public init(r: Float, g: Float, b: Float, a: Float) {
+        self.r = r; self.g = g; self.b = b; self.a = a
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let text = try container.decode(String.self, forKey: .value)
+        let parts = text.split(whereSeparator: \.isWhitespace).compactMap { Float($0) }
+        guard parts.count >= 4 else {
+            throw DecodingError.dataCorrupted(
+                .init(codingPath: decoder.codingPath, debugDescription: "Expected 4 color components, got \(parts.count)")
+            )
+        }
+        r = parts[0]; g = parts[1]; b = parts[2]; a = parts[3]
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode("\(r) \(g) \(b) \(a)", forKey: .value)
+    }
+}
+
+// MARK: - Materials
+
+public struct LibraryMaterials: Codable, Equatable {
+    public let materials: [Material]?
+
+    enum CodingKeys: String, CodingKey {
+        case materials = "material"
+    }
+}
+
+public struct Material: Codable, Equatable {
+    public let materialId: String?
+    public let name: String?
+    public let instanceEffect: InstanceEffect?
+
+    enum CodingKeys: String, CodingKey {
+        case materialId = "id"
+        case name
+        case instanceEffect = "instance_effect"
+    }
+}
+
+extension Material: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "id", "name": return .attribute
+        default: return .element
+        }
+    }
+}
+
+public struct InstanceEffect: Codable, Equatable {
+    public let url: String
+}
+
+extension InstanceEffect: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        return .attribute
     }
 }
 
 // MARK: - Geometries
+
 public struct LibraryGeometries: Codable, Equatable {
     public let geometries: [Geometry]
 
@@ -73,16 +282,26 @@ public struct Geometry: Codable, Equatable, Identifiable {
 
     public let geometryId: String?
     public let name: String?
-    public let mesh: Mesh?
+    public let mesh: ColladaMesh?
 
     enum CodingKeys: String, CodingKey {
         case geometryId = "id"
-        case name = "name"
-        case mesh = "mesh"
+        case name
+        case mesh
     }
 }
 
-public struct Mesh: Codable, Equatable {
+extension Geometry: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "id", "name": return .attribute
+        default: return .element
+        }
+    }
+}
+
+/// Renamed from `Mesh` to avoid collisions with RealityKit's `MeshResource.Mesh`
+public struct ColladaMesh: Codable, Equatable {
     public let sources: [Source]
     public let vertices: Vertices?
     public let triangles: [Triangles]?
@@ -90,9 +309,9 @@ public struct Mesh: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case sources = "source"
-        case vertices = "vertices"
-        case triangles = "triangles"
-        case polylist = "polylist"
+        case vertices
+        case triangles
+        case polylist
     }
 }
 
@@ -101,33 +320,26 @@ public struct Source: Codable, Equatable, Identifiable {
 
     public let sourceId: String?
     public let floatArray: FloatArray?
-    public let techniqueCommon: TechniqueCommon?
+    public let techniqueCommon: SourceTechniqueCommon?
 
     enum CodingKeys: String, CodingKey {
         case sourceId = "id"
         case floatArray = "float_array"
         case techniqueCommon = "technique_common"
     }
+}
 
-    public struct TechniqueCommon: Codable, Equatable {
-        public let accessor: Accessor
-
-        enum CodingKeys: String, CodingKey {
-            case accessor = "accessor"
+extension Source: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "id": return .attribute
+        default: return .element
         }
     }
 }
 
-public struct FloatArray: Codable, Equatable {
-    public let id: String?
-    public let count: Int
-    public let values: [Float]
-
-    enum CodingKeys: String, CodingKey {
-        case id = "id"
-        case count = "count"
-        case values = "_"
-    }
+public struct SourceTechniqueCommon: Codable, Equatable {
+    public let accessor: Accessor
 }
 
 public struct Accessor: Codable, Equatable {
@@ -137,10 +349,17 @@ public struct Accessor: Codable, Equatable {
     public let params: [Param]?
 
     enum CodingKeys: String, CodingKey {
-        case source = "source"
-        case count = "count"
-        case stride = "stride"
+        case source, count, stride
         case params = "param"
+    }
+}
+
+extension Accessor: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "source", "count", "stride": return .attribute
+        default: return .element
+        }
     }
 }
 
@@ -149,13 +368,28 @@ public struct Param: Codable, Equatable {
     public let type: String?
 }
 
+extension Param: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        return .attribute
+    }
+}
+
 public struct Vertices: Codable, Equatable {
     public let id: String?
     public let inputs: [Input]
 
     enum CodingKeys: String, CodingKey {
-        case id = "id"
+        case id
         case inputs = "input"
+    }
+}
+
+extension Vertices: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "id": return .attribute
+        default: return .element
+        }
     }
 }
 
@@ -164,12 +398,12 @@ public struct Input: Codable, Equatable {
     public let source: String
     public let offset: Int?
     public let set: Int?
+}
 
-    enum CodingKeys: String, CodingKey {
-        case semantic = "semantic"
-        case source = "source"
-        case offset = "offset"
-        case set = "set"
+extension Input: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        // All Input fields are XML attributes
+        return .attribute
     }
 }
 
@@ -180,10 +414,18 @@ public struct Triangles: Codable, Equatable {
     public let p: IndexArray
 
     enum CodingKeys: String, CodingKey {
-        case count = "count"
-        case material = "material"
+        case count, material
         case inputs = "input"
-        case p = "p"
+        case p
+    }
+}
+
+extension Triangles: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "count", "material": return .attribute
+        default: return .element
+        }
     }
 }
 
@@ -195,23 +437,23 @@ public struct Polylist: Codable, Equatable {
     public let p: IndexArray
 
     enum CodingKeys: String, CodingKey {
-        case count = "count"
-        case material = "material"
+        case count, material
         case inputs = "input"
-        case vcount = "vcount"
-        case p = "p"
+        case vcount, p
     }
 }
 
-public struct IndexArray: Codable, Equatable {
-    public let values: [Int]
-
-    enum CodingKeys: String, CodingKey {
-        case values = "_"
+extension Polylist: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "count", "material": return .attribute
+        default: return .element
+        }
     }
 }
 
 // MARK: - Visual Scenes
+
 public struct LibraryVisualScenes: Codable, Equatable {
     public let visualScenes: [VisualScene]
 
@@ -225,119 +467,182 @@ public struct VisualScene: Codable, Equatable, Identifiable {
 
     public let visualSceneId: String?
     public let name: String?
-    public let nodes: [Node]
+    public let nodes: [ColladaNode]
 
     enum CodingKeys: String, CodingKey {
         case visualSceneId = "id"
-        case name = "name"
+        case name
         case nodes = "node"
     }
 }
 
-public struct Node: Codable, Equatable, Identifiable {
+extension VisualScene: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "id", "name": return .attribute
+        default: return .element
+        }
+    }
+}
+
+/// Renamed from `Node` to avoid collisions with Foundation
+public struct ColladaNode: Codable, Equatable, Identifiable {
     public var id: String? { nodeId }
 
     public let nodeId: String?
     public let sid: String?
     public let name: String?
     public let type: String?
-    public let matrix: Matrix4x4?
-    public let translate: [Vector3]?
-    public let rotate: [Rotation]?
-    public let scale: [Vector3]?
+    public let matrix: ColladaMatrix4x4?
+    public let translate: [ColladaVector3]?
+    public let rotate: [ColladaRotation]?
+    public let scale: [ColladaVector3]?
     public let instanceGeometry: [InstanceGeometry]?
-    public let children: [Node]?
+    public let children: [ColladaNode]?
 
     enum CodingKeys: String, CodingKey {
         case nodeId = "id"
-        case sid = "sid"
-        case name = "name"
-        case type = "type"
-        case matrix = "matrix"
-        case translate = "translate"
-        case rotate = "rotate"
-        case scale = "scale"
+        case sid, name, type
+        case matrix
+        case translate, rotate, scale
         case instanceGeometry = "instance_geometry"
         case children = "node"
     }
 }
 
-public struct Matrix4x4: Codable, Equatable {
+extension ColladaNode: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "id", "sid", "name", "type": return .attribute
+        default: return .element
+        }
+    }
+}
+
+/// Decodes a whitespace-separated 16-value matrix string
+public struct ColladaMatrix4x4: Codable, Equatable {
     public let values: [Double]
     public let sid: String?
 
     enum CodingKeys: String, CodingKey {
-        case values = "_"
-        case sid = "sid"
+        case values = ""
+        case sid
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sid = try container.decodeIfPresent(String.self, forKey: .sid)
+        let text = try container.decode(String.self, forKey: .values)
+        values = text.split(whereSeparator: \.isWhitespace).compactMap { Double($0) }
     }
 }
 
-public struct Vector3: Codable, Equatable {
-    public let values: [Double]
-
-    enum CodingKeys: String, CodingKey {
-        case values = "_"
+extension ColladaMatrix4x4: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "sid": return .attribute
+        default: return .element
+        }
     }
 }
 
-public struct Rotation: Codable, Equatable {
+/// Decodes a whitespace-separated 3-value vector string
+public struct ColladaVector3: Codable, Equatable {
+    public let sid: String?
     public let values: [Double]
 
     enum CodingKeys: String, CodingKey {
-        case values = "_"
+        case sid
+        case values = ""
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sid = try container.decodeIfPresent(String.self, forKey: .sid)
+        let text = try container.decode(String.self, forKey: .values)
+        values = text.split(whereSeparator: \.isWhitespace).compactMap { Double($0) }
+    }
+}
+
+extension ColladaVector3: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "sid": return .attribute
+        default: return .element
+        }
+    }
+}
+
+/// Decodes a whitespace-separated 4-value rotation (axis x y z + angle in degrees)
+public struct ColladaRotation: Codable, Equatable {
+    public let sid: String?
+    public let values: [Double]
+
+    enum CodingKeys: String, CodingKey {
+        case sid
+        case values = ""
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sid = try container.decodeIfPresent(String.self, forKey: .sid)
+        let text = try container.decode(String.self, forKey: .values)
+        values = text.split(whereSeparator: \.isWhitespace).compactMap { Double($0) }
+    }
+}
+
+extension ColladaRotation: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "sid": return .attribute
+        default: return .element
+        }
     }
 }
 
 public struct InstanceGeometry: Codable, Equatable {
     public let url: String
+    public let name: String?
     public let bindMaterial: BindMaterial?
 
     enum CodingKeys: String, CodingKey {
-        case url = "url"
+        case url, name
         case bindMaterial = "bind_material"
     }
+}
 
-    public struct BindMaterial: Codable, Equatable {
-        public let techniqueCommon: TechniqueCommon?
-
-        enum CodingKeys: String, CodingKey {
-            case techniqueCommon = "technique_common"
+extension InstanceGeometry: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "url", "name": return .attribute
+        default: return .element
         }
+    }
+}
 
-        public struct TechniqueCommon: Codable, Equatable {
-            public let instanceMaterials: [InstanceMaterial]?
+public struct BindMaterial: Codable, Equatable {
+    public let techniqueCommon: BindMaterialTechniqueCommon?
 
-            enum CodingKeys: String, CodingKey {
-                case instanceMaterials = "instance_material"
-            }
-        }
+    enum CodingKeys: String, CodingKey {
+        case techniqueCommon = "technique_common"
+    }
+}
+
+public struct BindMaterialTechniqueCommon: Codable, Equatable {
+    public let instanceMaterials: [InstanceMaterial]?
+
+    enum CodingKeys: String, CodingKey {
+        case instanceMaterials = "instance_material"
     }
 }
 
 public struct InstanceMaterial: Codable, Equatable {
     public let symbol: String
     public let target: String
-
-    enum CodingKeys: String, CodingKey {
-        case symbol = "symbol"
-        case target = "target"
-    }
 }
 
-// Helper to decode whitespace-separated lists into arrays
-extension KeyedDecodingContainer {
-    public func decode(_ type: [Float].Type, forKey key: K) throws -> [Float] {
-        let string = try self.decode(String.self, forKey: key)
-        return string.split{ $0 == " " || $0 == "\n" || $0 == "\t" }.compactMap { Float($0) }
-    }
-
-    public func decode(_ type: [Double].Type, forKey key: K) throws -> [Double] {
-        let string = try self.decode(String.self, forKey: key)
-        return string.split{ $0 == " " || $0 == "\n" || $0 == "\t" }.compactMap { Double($0) }
-    }
-
-    public func decode(_ type: [Int].Type, forKey key: K) throws -> [Int] {
-        let string = try self.decode(String.self, forKey: key)
-        return string.split{ $0 == " " || $0 == "\n" || $0 == "\t" }.compactMap { Int($0) }
+extension InstanceMaterial: DynamicNodeDecoding {
+    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        return .attribute
     }
 }

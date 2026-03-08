@@ -59,12 +59,19 @@ public extension ModelEntity {
     /// - Returns: A ModelEntity if the file was successfully loaded and converted, nil otherwise
     @MainActor
     static func fromDAEAsset(url: URL, options: DAEImportOptions = .init()) async -> ModelEntity? {
+        print("🔍 Loading DAE file from: \(url.path)")
+
+        // For the custom loader, read data and parse directly
+        if options.loader == .custom {
+            guard let data = try? Data(contentsOf: url) else {
+                print("❌ Failed to read data from: \(url.path)")
+                return nil
+            }
+            return await ModelEntity.fromDAEAsset(data: data, options: options)
+        }
+
         do {
-            // Load the scene from the URL
-            print("🔍 Loading DAE file from: \(url.path)")
             let scene = try SCNScene(url: url, options: nil)
-            
-            // Convert the scene to a ModelEntity
             return await fromSCNScene(scene)
         } catch {
             // Attempt a fallback to using the data directly
@@ -105,7 +112,37 @@ public extension ModelEntity {
     private static func buildEntity(from node: RawNode) -> ModelEntity {
         let entity = ModelEntity()
         entity.name = node.name ?? "node"
-        entity.transform.matrix = node.transform
+        entity.transform.matrix = node.localTransform
+
+        // Build mesh + material if this node has geometry
+        if let rawMesh = node.mesh {
+            do {
+                var descriptor = MeshDescriptor(name: node.name ?? "mesh")
+                descriptor.positions = MeshBuffer(rawMesh.positions)
+                descriptor.primitives = .triangles(rawMesh.indices)
+                if let normals = rawMesh.normals {
+                    descriptor.normals = MeshBuffer(normals)
+                }
+                if let uvs = rawMesh.uvs {
+                    descriptor.textureCoordinates = MeshBuffer(uvs)
+                }
+                let meshResource = try MeshResource.generate(from: [descriptor])
+
+                var material = SimpleMaterial()
+                if let dc = node.diffuseColor {
+                    material.color.tint = .init(
+                        red: CGFloat(dc.r),
+                        green: CGFloat(dc.g),
+                        blue: CGFloat(dc.b),
+                        alpha: CGFloat(dc.a)
+                    )
+                }
+                entity.model = ModelComponent(mesh: meshResource, materials: [material])
+            } catch {
+                print("Failed to generate mesh for node '\(node.name ?? "?")': \(error)")
+            }
+        }
+
         for child in node.children {
             let childEntity = buildEntity(from: child)
             entity.addChild(childEntity)

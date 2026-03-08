@@ -31,15 +31,23 @@ public struct RawNode: Sendable, Identifiable {
     private let uuid = UUID().uuidString
 
     public var name: String?
-    public var transform: simd_float4x4
+    /// The node's local transform relative to its parent
+    public var localTransform: simd_float4x4
     public var mesh: RawMesh?
+    public var diffuseColor: ColorRGBA?
     public var children: [RawNode]
-    // Future: geometry refs, materials, etc.
 
-    public init(name: String?, transform: simd_float4x4, mesh: RawMesh? = nil, children: [RawNode] = []) {
+    public init(
+        name: String?,
+        localTransform: simd_float4x4,
+        mesh: RawMesh? = nil,
+        diffuseColor: ColorRGBA? = nil,
+        children: [RawNode] = []
+    ) {
         self.name = name
-        self.transform = transform
+        self.localTransform = localTransform
         self.mesh = mesh
+        self.diffuseColor = diffuseColor
         self.children = children
     }
 }
@@ -53,7 +61,7 @@ public enum UpAxis: String, Sendable {
 }
 
 public enum AxisConversion {
-    // Convert from given COLLADA up-axis to RealityKit's Y-up
+    /// Convert from given COLLADA up-axis to RealityKit's Y-up
     public static func toYUp(from up: UpAxis) -> simd_float4x4 {
         switch up {
         case .y: return matrix_identity_float4x4
@@ -66,14 +74,13 @@ public enum AxisConversion {
                                  SIMD4(0, -s, c, 0),
                                  SIMD4(0, 0, 0, 1))
         case .x:
-            // Rotate +90 degrees around Z then swap X/Y if needed; simple approach:
+            // Rotate +90 degrees around Z to bring X-up to Y-up
             let angle: Float = .pi / 2
             let c = cos(angle), s = sin(angle)
-            return simd_float4x4(SIMD4(c, -s, 0, 0),
-                                 SIMD4(s,  c, 0, 0),
+            return simd_float4x4(SIMD4(c, s, 0, 0),
+                                 SIMD4(-s, c, 0, 0),
                                  SIMD4(0,  0, 1, 0),
                                  SIMD4(0,  0, 0, 1))
         }
     }
 }
-

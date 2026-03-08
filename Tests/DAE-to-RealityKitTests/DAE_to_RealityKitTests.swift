@@ -103,4 +103,10 @@ func verifyEntityHasMesh(_ entity: Entity, label: String) {
     guard let entity else { return }
 
     await verifyEntityHasMesh(entity, label: "link_1")
+    
+    let customEntity = await ModelEntity.fromDAEAsset(url: url, options: .init(loader: .custom))
+    #expect(customEntity != nil, "customEntity should be loaded successfully from link_1.dae")
+    guard let customEntity else { return }
+    await verifyEntityHasMesh(customEntity, label: "link_1")
+    print("customEntity", customEntity)
 }

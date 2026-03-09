@@ -6,8 +6,10 @@
 //
 
 import Foundation
+import RealityKit
 import simd
 
+/// Stores the positions, normals, uvs, and indices arrays representing a mesh
 public struct RawMesh: Sendable {
     public var positions: [SIMD3<Float>]
     public var normals: [SIMD3<Float>]? = nil
@@ -21,11 +23,13 @@ public struct RawMesh: Sendable {
     }
 }
 
+/// A set of root `RawNode` objects representing the base element or elements in the assembly, which themselves may have child nodes.
 public struct RawScene: Sendable {
     public var rootNodes: [RawNode]
     public init(rootNodes: [RawNode]) { self.rootNodes = rootNodes }
 }
 
+/// A single node in the assembly, which stores transform, mesh, material, and child relationships in the assembly.
 public struct RawNode: Sendable, Identifiable {
     public var id: String { name ?? uuid }
     private let uuid = UUID().uuidString
@@ -84,3 +88,4 @@ public enum AxisConversion {
         }
     }
 }
+

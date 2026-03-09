@@ -107,6 +107,28 @@ func verifyEntityHasMesh(_ entity: Entity, label: String) {
     let customEntity = await ModelEntity.fromDAEAsset(url: url, options: .init(loader: .custom))
     #expect(customEntity != nil, "customEntity should be loaded successfully from link_1.dae")
     guard let customEntity else { return }
-    await verifyEntityHasMesh(customEntity, label: "link_1")
-    print("customEntity", customEntity)
+    await verifyEntityHasMesh(customEntity, label: "link_1 (custom url)")
 }
+
+@Test func testLoadLink1DaeFromRawData() async throws {
+    guard let url = Bundle.module.url(forResource: "link_1", withExtension: "dae") else {
+        Issue.record("Failed to get URL for link_1.dae test resource")
+        return
+    }
+
+    let data = try Data(contentsOf: url)
+    print("Loaded \(data.count) bytes of raw DAE data")
+
+    // Load with explicit custom parser from raw Data
+    let customEntity = await ModelEntity.fromDAEAsset(data: data, options: .init(loader: .custom))
+    #expect(customEntity != nil, "Custom parser should load from raw Data")
+    guard let customEntity else { return }
+    await verifyEntityHasMesh(customEntity, label: "link_1 (custom data)")
+
+    // Load with auto-detection from raw Data — should detect XML and use custom parser
+    let autoEntity = await ModelEntity.fromDAEAsset(data: data)
+    #expect(autoEntity != nil, "Auto-detect should load raw DAE Data")
+    guard let autoEntity else { return }
+    await verifyEntityHasMesh(autoEntity, label: "link_1 (auto data)")
+}
+

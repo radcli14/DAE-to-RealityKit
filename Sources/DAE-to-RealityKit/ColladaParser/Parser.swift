@@ -10,14 +10,33 @@ import XMLCoder
 import simd
 
 extension Collada {
-    /// Provides function for parsing the Collada DAE XML file, and intermediate data structures between the raw XML data and RealityKit
+    /// Parses COLLADA 1.4.1 XML data into an intermediate scene representation.
+    ///
+    /// The parser decodes the XML into ``Collada`` model structures using `XMLDecoder`,
+    /// then transforms the decoded data into a ``Collada/Parser/Scene`` containing
+    /// a hierarchy of ``Collada/Parser/Node`` objects ready for conversion to RealityKit entities.
+    ///
+    /// ## Usage
+    /// ```swift
+    /// let parser = Collada.Parser()
+    /// let scene = try parser.parse(data: xmlData)
+    /// let entity = scene.rootNodes.first?.buildEntity()
+    /// ```
     struct Parser {
 
+        /// Errors that can occur during COLLADA parsing.
         enum Error: Swift.Error {
+            /// The XML data could not be decoded into the ``Collada`` model structure.
             case decodeFailed(Swift.Error)
         }
 
-        /// Parse the XML contents of a `Data` object into a `Collada.Parser.Scene`
+        /// Parses COLLADA XML data into an intermediate ``Scene``.
+        ///
+        /// Decodes the XML, resolves material and texture references, builds the node
+        /// hierarchy with transforms, and extracts mesh geometry.
+        /// - Parameter data: Raw XML data of the COLLADA document.
+        /// - Returns: A ``Scene`` containing the parsed node hierarchy.
+        /// - Throws: ``Error/decodeFailed(_:)`` if XML decoding fails.
         func parse(data: Data) throws -> Scene {
             let decoder = XMLDecoder()
             decoder.trimValueWhitespaces = false
@@ -42,6 +61,10 @@ extension Collada {
 
     // MARK: - Material Map
 
+    /// Builds a mapping from material IDs to resolved ``Material`` values.
+    ///
+    /// Walks `<library_effects>` to extract shading properties and resolve texture paths,
+    /// then maps each `<material>` ID to its effect's resolved material.
     private func buildMaterialMap(
         from collada: Collada,
     ) -> [String: Material] {
@@ -89,7 +112,13 @@ extension Collada {
         return materialMap
     }
 
-    /// Resolves the COLLADA texture pipeline: sampler → surface → image → file path
+    /// Resolves the COLLADA texture pipeline: sampler → surface → image → file path.
+    ///
+    /// Follows the chain of `<newparam>` declarations to resolve a texture reference:
+    /// 1. Find the `<sampler2D>` param matching `samplerSid`
+    /// 2. Get the sampler's `<source>` → surface `sid`
+    /// 3. Find the `<surface>` param → get `<init_from>` image ID
+    /// 4. Look up the image ID in the image map to get the file path
     private func resolveTexturePath(
         samplerSid: String,
         newparams: [Collada.Effect.NewParam]?,
@@ -111,6 +140,11 @@ extension Collada {
 
     // MARK: - Node Hierarchy
 
+    /// Builds the top-level node array from the active visual scene.
+    ///
+    /// Identifies which `<visual_scene>` to use (via `<scene>` → `<instance_visual_scene>`),
+    /// then recursively converts each COLLADA node to a ``Node``, applying the root
+    /// axis-conversion transform as the parent of all top-level nodes.
     private func buildNodes(
         from collada: Collada,
         materialMap: [String: Material]
@@ -135,6 +169,10 @@ extension Collada {
         }
     }
 
+    /// Recursively converts a ``Collada/Node`` into a ``Collada/Parser/Node``.
+    ///
+    /// Computes the local transform, resolves geometry and material bindings,
+    /// and recurses into child nodes.
     private func makeNode(
         _ node: Collada.Node,
         parentWorldTransform: simd_float4x4,
@@ -184,6 +222,11 @@ extension Collada {
 
     // MARK: - Transform
 
+    /// Computes the local transform matrix for a COLLADA node.
+    ///
+    /// If the node has a `<matrix>` element, converts it from row-major to column-major.
+    /// Otherwise, composes the transform from TRS (translate, rotate, scale) elements
+    /// in the order: result = T × R × S.
     private func localMatrix(from node: Collada.Node) -> simd_float4x4 {
         if let m = node.matrix?.values, m.count == 16 {
             // COLLADA matrices are row-major; simd_float4x4 is column-major
@@ -228,6 +271,7 @@ extension Collada {
         return result
     }
 
+    /// Builds a rotation matrix from an axis and angle using the Rodrigues' rotation formula.
     private func rotationMatrix(axis: SIMD3<Float>, angle: Float) -> simd_float4x4 {
         let a = simd_normalize(axis)
         let c = cos(angle)
@@ -244,6 +288,11 @@ extension Collada {
 
     // MARK: - Mesh Extraction
 
+    /// Extracts vertex positions, normals, UVs, and indices from a ``Collada/Geometry/Mesh``.
+    ///
+    /// Resolves source references through `<vertices>` indirection, handles both
+    /// `<triangles>` and `<polylist>` primitives (triangulating polylists via fan decomposition),
+    /// and de-interleaves the shared index buffer into per-vertex attribute arrays.
     private func extractMesh(from colladaMesh: Collada.Geometry.Mesh) -> Mesh? {
         var sourceMap: [String: Collada.Geometry.Source] = [:]
         for src in colladaMesh.sources {
@@ -370,6 +419,10 @@ extension Collada {
         )
     }
 
+    /// Converts a polylist's variable-vertex-count polygons into triangles using fan decomposition.
+    ///
+    /// For each polygon with N vertices, generates (N-2) triangles by fanning from the
+    /// first vertex. Preserves the interleaved index structure (each vertex has `inputCount` indices).
     private func triangulatePolylist(vcount: [Int], p: [Int], inputCount: Int) -> [Int] {
         var result: [Int] = []
         var offset = 0

@@ -8,7 +8,11 @@
 import Foundation
 
 extension Collada {
-    /// Decodes a whitespace-separated "R G B A" string into individual components
+    /// An RGBA color value decoded from a whitespace-separated string (e.g. `"0.8 0.2 0.1 1.0"`).
+    ///
+    /// Used throughout the COLLADA schema for `<color>` elements within shading properties
+    /// such as `<diffuse>`, `<emission>`, `<ambient>`, and `<specular>`.
+    /// Components are stored as `Float` values, typically in the range 0.0–1.0.
     struct ColorRGBA: Codable, Equatable, Sendable {
         let r: Float
         let g: Float

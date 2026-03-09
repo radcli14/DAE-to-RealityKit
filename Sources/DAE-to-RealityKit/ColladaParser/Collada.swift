@@ -10,14 +10,28 @@ import XMLCoder
 
 // MARK: - COLLADA 1.4.1 Schema
 
+/// Root structure representing a COLLADA 1.4.1 document (`<COLLADA>` element).
+///
+/// Maps directly to the top-level `<COLLADA>` XML element defined in the
+/// [COLLADA 1.4.1 schema](https://www.khronos.org/files/collada_spec_1_4.pdf), Section 7.1.
+/// Contains the asset metadata, library sections for images, effects, materials, geometries,
+/// visual scenes, and the scene binding that selects the default visual scene.
 struct Collada: Codable, Equatable {
+    /// The COLLADA schema version (e.g. `"1.4.1"`), specified as an XML attribute.
     let version: String?
+    /// Metadata about the document, including the coordinate system's up-axis.
     let asset: Asset?
+    /// Collection of image assets referenced by effects for texture mapping (`<library_images>`).
     let libraryImages: LibraryImages?
+    /// Collection of rendering effects defining shading models and parameters (`<library_effects>`).
     let libraryEffects: LibraryEffects?
+    /// Collection of materials that bind effect instances to geometry (`<library_materials>`).
     let libraryMaterials: LibraryMaterials?
+    /// Collection of geometric primitives (meshes) (`<library_geometries>`).
     let libraryGeometries: LibraryGeometries?
+    /// Collection of visual scenes defining node hierarchies and transforms (`<library_visual_scenes>`).
     let libraryVisualScenes: LibraryVisualScenes?
+    /// The scene binding that selects which visual scene to instantiate (`<scene>`).
     let scene: Scene?
 
     enum CodingKeys: String, CodingKey {
@@ -44,7 +58,13 @@ extension Collada: DynamicNodeDecoding {
 // MARK: - Asset
 
 extension Collada {
+    /// Metadata about the COLLADA document (`<asset>` element).
+    ///
+    /// Per COLLADA 1.4.1, Section 7.1.1, the `<asset>` element can contain contributor info,
+    /// creation date, and importantly the `<up_axis>` which defines the coordinate system orientation.
     struct Asset: Codable, Equatable {
+        /// The up-axis of the coordinate system (e.g. `"Y_UP"`, `"Z_UP"`, `"X_UP"`).
+        /// Defaults to `"Y_UP"` per the COLLADA specification when absent.
         let upAxis: String?
 
         enum CodingKeys: String, CodingKey {
@@ -56,7 +76,12 @@ extension Collada {
 // MARK: - Scene Binding
 
 extension Collada {
+    /// The scene binding element (`<scene>`) that selects which visual scene to render.
+    ///
+    /// Per COLLADA 1.4.1, Section 7.1.6, the `<scene>` element instantiates a visual scene
+    /// from the library by URL reference.
     struct Scene: Codable, Equatable {
+        /// Reference to the visual scene to instantiate (`<instance_visual_scene>`).
         let instanceVisualScene: InstanceVisualScene?
 
         enum CodingKeys: String, CodingKey {
@@ -64,7 +89,12 @@ extension Collada {
         }
     }
 
+    /// A reference to a visual scene by URL (`<instance_visual_scene>` element).
+    ///
+    /// The `url` attribute is a URI fragment (e.g. `"#MyScene"`) pointing to a
+    /// `<visual_scene>` in `<library_visual_scenes>`.
     struct InstanceVisualScene: Codable, Equatable {
+        /// URI fragment referencing a `<visual_scene>` id (e.g. `"#Scene"`).
         let url: String
     }
 }

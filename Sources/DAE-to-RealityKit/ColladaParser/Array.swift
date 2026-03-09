@@ -11,10 +11,17 @@ import XMLCoder
 // MARK: - Whitespace-Separated Array Wrapper Types
 
 extension Collada {
-    /// Decodes a whitespace-separated string of floats (e.g. "1.0 2.0 3.0") into [Float]
+    /// A float data array (`<float_array>` element) decoded from a whitespace-separated string.
+    ///
+    /// Per COLLADA 1.4.1, Section 7.6.3, `<float_array>` stores raw numeric data
+    /// (vertex positions, normals, texture coordinates, etc.) as a space-delimited string.
+    /// The `count` attribute declares the expected number of values.
     struct FloatArray: Codable, Equatable {
+        /// Unique identifier for this array, referenced by `<accessor>` source attributes.
         let id: String?
+        /// The declared number of float values.
         let count: Int
+        /// The parsed float values.
         let values: [Float]
 
         enum CodingKeys: String, CodingKey {
@@ -31,8 +38,12 @@ extension Collada {
         }
     }
 
-    /// Decodes a whitespace-separated string of integers (e.g. "0 1 2 3") into [Int]
+    /// An integer index array decoded from a whitespace-separated string (e.g. `"0 1 2 3"`).
+    ///
+    /// Used for `<p>` (primitive index) and `<vcount>` (vertex count) elements within
+    /// `<triangles>` and `<polylist>` primitives.
     struct IndexArray: Codable, Equatable {
+        /// The parsed integer index values.
         let values: [Int]
 
         enum CodingKeys: String, CodingKey {

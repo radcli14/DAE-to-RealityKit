@@ -16,7 +16,7 @@ public enum ColladaParserError: Error {
 public struct ColladaParser {
     public init() {}
 
-    public func parse(data: Data) throws -> RawScene {
+    public func parse(data: Data) throws -> Collada.RawScene {
         let decoder = XMLDecoder()
         decoder.trimValueWhitespaces = false
         decoder.shouldProcessNamespaces = true
@@ -39,7 +39,7 @@ public struct ColladaParser {
                 geometryMap: geometryMap,
                 materialColorMap: materialColorMap
             )
-            return RawScene(rootNodes: nodes)
+            return Collada.RawScene(rootNodes: nodes)
         } catch {
             throw ColladaParserError.decodeFailed(error)
         }
@@ -94,7 +94,7 @@ public struct ColladaParser {
         rootTransform: simd_float4x4,
         geometryMap: [String: Geometry],
         materialColorMap: [String: ColorRGBA]
-    ) -> [RawNode] {
+    ) -> [Collada.RawNode] {
         guard let lib = collada.libraryVisualScenes else { return [] }
         let sceneId = collada.scene?.instanceVisualScene?.url
             .trimmingCharacters(in: CharacterSet(charactersIn: "#"))
@@ -120,12 +120,12 @@ public struct ColladaParser {
         parentWorldTransform: simd_float4x4,
         geometryMap: [String: Geometry],
         materialColorMap: [String: ColorRGBA]
-    ) -> RawNode {
+    ) -> Collada.RawNode {
         let local = localMatrix(from: node)
         let worldTransform = parentWorldTransform * local
 
         // Resolve mesh from instance_geometry
-        var mesh: RawMesh? = nil
+        var mesh: Collada.RawMesh? = nil
         var diffuseColor: ColorRGBA? = nil
         if let instances = node.instanceGeometry {
             for inst in instances {
@@ -155,7 +155,7 @@ public struct ColladaParser {
             )
         }
 
-        return RawNode(
+        return Collada.RawNode(
             name: node.name ?? node.nodeId,
             localTransform: local,
             mesh: mesh,
@@ -232,7 +232,7 @@ public struct ColladaParser {
     // MARK: - Mesh Extraction
 
     /// Extract positions, normals, UVs, and triangle indices from a COLLADA mesh
-    private func extractMesh(from colladaMesh: ColladaMesh) -> RawMesh? {
+    private func extractMesh(from colladaMesh: ColladaMesh) -> Collada.RawMesh? {
         // Build a source map: "#sourceId" -> Source
         var sourceMap: [String: Source] = [:]
         for src in colladaMesh.sources {
@@ -361,7 +361,7 @@ public struct ColladaParser {
 
         guard !allPositions.isEmpty else { return nil }
 
-        return RawMesh(
+        return Collada.RawMesh(
             positions: allPositions,
             normals: hasNormals ? allNormals : nil,
             uvs: hasUVs ? allUVs : nil,

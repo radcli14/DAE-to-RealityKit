@@ -30,27 +30,27 @@ public extension ModelEntity {
         data: Data,
         options: DAEImportOptions = .init()
     ) async -> ModelEntity? {
-        let loader = options.loader == .auto ? detectLoader(for: data) : options.loader
+        let loader = options.loader == .auto ? detectDAELoader(for: data) : options.loader
         print("Loading DAE from data (\(data.count) bytes) with \(loader) loader")
 
         switch loader {
         case .custom:
-            let result = await fromCustomDAEData(data)
+            let result = await fromDataUsingCustomDAEParser(data)
             if result != nil { return result }
             // Fallback to SceneKit if custom parser failed and caller used auto
             if options.loader == .auto {
                 print("Custom parser failed, falling back to SceneKit")
-                return await fromSceneKitData(data)
+                return await fromDataUsingSceneKitDAEParser(data)
             }
             return nil
 
         case .sceneKit, .auto:
-            let result = await fromSceneKitData(data)
+            let result = await fromDataUsingSceneKitDAEParser(data)
             if result != nil { return result }
             // Fallback to custom parser if SceneKit failed and caller used auto
             if options.loader == .auto {
                 print("SceneKit failed, falling back to custom parser")
-                return await fromCustomDAEData(data)
+                return await fromDataUsingCustomDAEParser(data)
             }
             return nil
         }
@@ -103,7 +103,7 @@ public extension ModelEntity {
     /// Inspect the first bytes to determine the best loader.
     /// - Binary plist (bplist) → Xcode-compiled SCN → use SceneKit
     /// - XML declaration (<?xml) → raw COLLADA → use custom parser
-    private static func detectLoader(for data: Data) -> DAEImportOptions.Loader {
+    private static func detectDAELoader(for data: Data) -> DAEImportOptions.Loader {
         guard data.count >= 6 else { return .sceneKit }
 
         // Binary plist: starts with "bplist"
@@ -126,7 +126,7 @@ public extension ModelEntity {
     // MARK: - Parser Implementations
 
     @MainActor
-    private static func fromSceneKitData(_ data: Data) async -> ModelEntity? {
+    private static func fromDataUsingSceneKitDAEParser(_ data: Data) async -> ModelEntity? {
         guard let source = SCNSceneSource(data: data, options: [
             SCNSceneSource.LoadingOption.checkConsistency: true
         ]) else {
@@ -146,13 +146,13 @@ public extension ModelEntity {
     }
 
     @MainActor
-    private static func fromCustomDAEData(_ data: Data) async -> ModelEntity? {
+    private static func fromDataUsingCustomDAEParser(_ data: Data) async -> ModelEntity? {
         let parser = ColladaParser()
         do {
             let raw = try parser.parse(data: data)
             let root = ModelEntity()
             for node in raw.rootNodes {
-                let child = buildEntity(from: node)
+                let child = node.buildEntity()
                 root.addChild(child)
             }
             return root
@@ -161,45 +161,5 @@ public extension ModelEntity {
             return nil
         }
     }
-
-    @MainActor
-    private static func buildEntity(from node: RawNode) -> ModelEntity {
-        let entity = ModelEntity()
-        entity.name = node.name ?? "node"
-        entity.transform.matrix = node.localTransform
-
-        if let rawMesh = node.mesh {
-            do {
-                var descriptor = MeshDescriptor(name: node.name ?? "mesh")
-                descriptor.positions = MeshBuffer(rawMesh.positions)
-                descriptor.primitives = .triangles(rawMesh.indices)
-                if let normals = rawMesh.normals {
-                    descriptor.normals = MeshBuffer(normals)
-                }
-                if let uvs = rawMesh.uvs {
-                    descriptor.textureCoordinates = MeshBuffer(uvs)
-                }
-                let meshResource = try MeshResource.generate(from: [descriptor])
-
-                var material = SimpleMaterial()
-                if let dc = node.diffuseColor {
-                    material.color.tint = .init(
-                        red: CGFloat(dc.r),
-                        green: CGFloat(dc.g),
-                        blue: CGFloat(dc.b),
-                        alpha: CGFloat(dc.a)
-                    )
-                }
-                entity.model = ModelComponent(mesh: meshResource, materials: [material])
-            } catch {
-                print("Failed to generate mesh for node '\(node.name ?? "?")': \(error)")
-            }
-        }
-
-        for child in node.children {
-            let childEntity = buildEntity(from: child)
-            entity.addChild(childEntity)
-        }
-        return entity
-    }
 }
+

@@ -9,37 +9,40 @@ import Foundation
 import XMLCoder
 import simd
 
-enum ColladaParserError: Error {
-    case decodeFailed(Error)
-}
+extension Collada {
+    /// Provides function for parsing the Collada DAE XML file, and intermediate data structures between the raw XML data and RealityKit
+    struct Parser {
 
-struct ColladaParser {
-
-    func parse(data: Data) throws -> Collada.RawScene {
-        let decoder = XMLDecoder()
-        decoder.trimValueWhitespaces = false
-        decoder.shouldProcessNamespaces = true
-
-        do {
-            let collada = try decoder.decode(Collada.self, from: data)
-            let up = UpAxis.from(collada.asset?.upAxis)
-            let rootTransform = AxisConversion.toYUp(from: up)
-
-            let geometryMap = buildGeometryMap(from: collada)
-            let imageMap = buildImageMap(from: collada)
-            let materialMap = buildMaterialMap(from: collada, imageMap: imageMap)
-
-            let nodes = buildNodes(
-                from: collada,
-                rootTransform: rootTransform,
-                geometryMap: geometryMap,
-                materialMap: materialMap
-            )
-            return Collada.RawScene(rootNodes: nodes)
-        } catch {
-            throw ColladaParserError.decodeFailed(error)
+        enum Error: Swift.Error {
+            case decodeFailed(Swift.Error)
         }
-    }
+
+        /// Parse the XML contents of a `Data` object into a `Collada.Parser.Scene`
+        func parse(data: Data) throws -> Scene {
+            let decoder = XMLDecoder()
+            decoder.trimValueWhitespaces = false
+            decoder.shouldProcessNamespaces = true
+
+            do {
+                let collada = try decoder.decode(Collada.self, from: data)
+                let up = UpAxis.from(collada.asset?.upAxis)
+                let rootTransform = AxisConversion.toYUp(from: up)
+
+                let geometryMap = buildGeometryMap(from: collada)
+                let imageMap = buildImageMap(from: collada)
+                let materialMap = buildMaterialMap(from: collada, imageMap: imageMap)
+
+                let nodes = buildNodes(
+                    from: collada,
+                    rootTransform: rootTransform,
+                    geometryMap: geometryMap,
+                    materialMap: materialMap
+                )
+                return Scene(rootNodes: nodes)
+            } catch {
+                throw Error.decodeFailed(error)
+            }
+        }
 
     // MARK: - Geometry Map
 
@@ -72,9 +75,9 @@ struct ColladaParser {
     private func buildMaterialMap(
         from collada: Collada,
         imageMap: [String: String]
-    ) -> [String: Collada.RawMaterial] {
-        // Build effect → RawMaterial map
-        var effectMap: [String: Collada.RawMaterial] = [:]
+    ) -> [String: Material] {
+        // Build effect → Material map
+        var effectMap: [String: Material] = [:]
         if let effects = collada.libraryEffects?.effects {
             for effect in effects {
                 guard let eId = effect.effectId,
@@ -90,7 +93,7 @@ struct ColladaParser {
                     )
                 }
 
-                effectMap[eId] = Collada.RawMaterial(
+                effectMap[eId] = Material(
                     diffuseColor: technique.diffuseColor,
                     diffuseTexturePath: texturePath,
                     emissionColor: technique.emissionColor,
@@ -102,8 +105,8 @@ struct ColladaParser {
             }
         }
 
-        // Map material ids to their resolved effect's RawMaterial
-        var materialMap: [String: Collada.RawMaterial] = [:]
+        // Map material ids to their resolved effect's Material
+        var materialMap: [String: Material] = [:]
         if let materials = collada.libraryMaterials?.materials {
             for mat in materials {
                 guard let matId = mat.materialId,
@@ -143,8 +146,8 @@ struct ColladaParser {
         from collada: Collada,
         rootTransform: simd_float4x4,
         geometryMap: [String: Collada.Geometry],
-        materialMap: [String: Collada.RawMaterial]
-    ) -> [Collada.RawNode] {
+        materialMap: [String: Material]
+    ) -> [Node] {
         guard let lib = collada.libraryVisualScenes else { return [] }
         let sceneId = collada.scene?.instanceVisualScene?.url
             .trimmingCharacters(in: CharacterSet(charactersIn: "#"))
@@ -156,7 +159,7 @@ struct ColladaParser {
         }
         guard let vs = visualScene else { return [] }
         return vs.nodes.map { node in
-            makeRawNode(
+            makeNode(
                 node,
                 parentWorldTransform: rootTransform,
                 geometryMap: geometryMap,
@@ -165,17 +168,17 @@ struct ColladaParser {
         }
     }
 
-    private func makeRawNode(
+    private func makeNode(
         _ node: Collada.Node,
         parentWorldTransform: simd_float4x4,
         geometryMap: [String: Collada.Geometry],
-        materialMap: [String: Collada.RawMaterial]
-    ) -> Collada.RawNode {
+        materialMap: [String: Material]
+    ) -> Node {
         let local = localMatrix(from: node)
         let worldTransform = parentWorldTransform * local
 
-        var mesh: Collada.RawMesh? = nil
-        var rawMaterial: Collada.RawMaterial? = nil
+        var mesh: Mesh? = nil
+        var nodeMaterial: Material? = nil
         if let instances = node.instanceGeometry {
             for inst in instances {
                 let geoId = String(inst.url.dropFirst())
@@ -186,7 +189,7 @@ struct ColladaParser {
                     for bind in binds {
                         let matId = String(bind.target.dropFirst())
                         if let mat = materialMap[matId] {
-                            rawMaterial = mat
+                            nodeMaterial = mat
                             break
                         }
                     }
@@ -195,7 +198,7 @@ struct ColladaParser {
         }
 
         let children = (node.children ?? []).map {
-            makeRawNode(
+            makeNode(
                 $0,
                 parentWorldTransform: worldTransform,
                 geometryMap: geometryMap,
@@ -203,11 +206,11 @@ struct ColladaParser {
             )
         }
 
-        return Collada.RawNode(
+        return Node(
             name: node.name ?? node.nodeId,
             localTransform: local,
             mesh: mesh,
-            material: rawMaterial,
+            material: nodeMaterial,
             children: children
         )
     }
@@ -274,7 +277,7 @@ struct ColladaParser {
 
     // MARK: - Mesh Extraction
 
-    private func extractMesh(from colladaMesh: Collada.Geometry.Mesh) -> Collada.RawMesh? {
+    private func extractMesh(from colladaMesh: Collada.Geometry.Mesh) -> Mesh? {
         var sourceMap: [String: Collada.Geometry.Source] = [:]
         for src in colladaMesh.sources {
             if let srcId = src.sourceId {
@@ -392,7 +395,7 @@ struct ColladaParser {
 
         guard !allPositions.isEmpty else { return nil }
 
-        return Collada.RawMesh(
+        return Mesh(
             positions: allPositions,
             normals: hasNormals ? allNormals : nil,
             uvs: hasUVs ? allUVs : nil,
@@ -418,5 +421,6 @@ struct ColladaParser {
             offset += count * inputCount
         }
         return result
+        }
     }
 }

@@ -147,7 +147,7 @@ public extension ModelEntity {
 
     @MainActor
     private static func fromDataUsingCustomDAEParser(_ data: Data) async -> ModelEntity? {
-        let parser = ColladaParser()
+        let parser = Collada.Parser()
         do {
             let raw = try parser.parse(data: data)
             let root = ModelEntity()

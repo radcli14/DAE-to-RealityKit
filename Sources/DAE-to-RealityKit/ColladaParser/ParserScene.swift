@@ -9,33 +9,33 @@ import Foundation
 import RealityKit
 import simd
 
-extension Collada {
+extension Collada.Parser {
 
-    /// A set of root `RawNode` objects representing the base element or elements in the assembly,
+    /// A set of root nodes representing the base element or elements in the assembly,
     /// which themselves may have child nodes.
-    struct RawScene: Sendable {
-        var rootNodes: [RawNode]
+    struct Scene: Sendable {
+        var rootNodes: [Node]
     }
 
     /// A single node in the assembly, which stores transform, mesh, material,
     /// and child relationships in the assembly.
-    struct RawNode: Sendable, Identifiable {
+    struct Node: Sendable, Identifiable {
         var id: String { name ?? uuid }
         private let uuid = UUID().uuidString
 
         var name: String?
         /// The node's local transform relative to its parent
         var localTransform: simd_float4x4
-        var mesh: RawMesh?
-        var material: RawMaterial?
-        var children: [RawNode]
+        var mesh: Mesh?
+        var material: Material?
+        var children: [Node]
 
         init(
             name: String?,
             localTransform: simd_float4x4,
-            mesh: RawMesh? = nil,
-            material: RawMaterial? = nil,
-            children: [RawNode] = []
+            mesh: Mesh? = nil,
+            material: Material? = nil,
+            children: [Node] = []
         ) {
             self.name = name
             self.localTransform = localTransform
@@ -46,7 +46,7 @@ extension Collada {
     }
 
     /// Stores the positions, normals, uvs, and indices arrays representing a mesh
-    struct RawMesh: Sendable {
+    struct Mesh: Sendable {
         var positions: [SIMD3<Float>]
         var normals: [SIMD3<Float>]? = nil
         var uvs: [SIMD2<Float>]? = nil
@@ -54,12 +54,12 @@ extension Collada {
     }
 
     /// Stores the visual material properties extracted from the COLLADA effect
-    struct RawMaterial: Sendable {
-        var diffuseColor: ColorRGBA?
+    struct Material: Sendable {
+        var diffuseColor: Collada.ColorRGBA?
         var diffuseTexturePath: String?
-        var emissionColor: ColorRGBA?
-        var ambientColor: ColorRGBA?
-        var specularColor: ColorRGBA?
+        var emissionColor: Collada.ColorRGBA?
+        var ambientColor: Collada.ColorRGBA?
+        var specularColor: Collada.ColorRGBA?
         /// COLLADA shininess (0–128 typical), converted to roughness = 1 - (shininess / 128)
         var shininess: Float?
         var transparency: Float?
@@ -68,7 +68,7 @@ extension Collada {
 
 // MARK: - Entity Building
 
-extension Collada.RawNode {
+extension Collada.Parser.Node {
     /// Convert the node data into a RealityKit `ModelEntity`
     @MainActor
     func buildEntity() -> ModelEntity {
@@ -91,7 +91,7 @@ extension Collada.RawNode {
         return entity
     }
 
-    /// Build a RealityKit `PhysicallyBasedMaterial` from the raw material properties
+    /// Build a RealityKit `PhysicallyBasedMaterial` from the material properties
     private func buildMaterial() -> PhysicallyBasedMaterial {
         var pbr = PhysicallyBasedMaterial()
 
@@ -143,7 +143,7 @@ extension Collada.RawNode {
     }
 }
 
-extension Collada.RawMesh {
+extension Collada.Parser.Mesh {
     @MainActor
     func buildMeshResource(name: String? = nil) throws -> MeshResource {
         var descriptor = MeshDescriptor(name: name ?? "mesh")

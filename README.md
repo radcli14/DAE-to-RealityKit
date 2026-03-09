@@ -1,7 +1,11 @@
 # DAE-to-RealityKit
 Extensions to convert 3D models in DAE format to RealityKit entities.
+This repository is developed as part of the [Augmented Reality Mobile Robotics (ARMOR) project](armor.dc-engineer.com).
+Below are examples of Universal Robot Description Format (URDF) files containing DAE models, which have been loaded using this utility, and rendered in ARMOR.
 
-![Example](screenshotDaeToRealityKit.png)
+| Anymal | Panda | ABB IRB 6640 |
+|---|---|---|
+| ![Anymal](Images/anymal.png) | ![Panda](Images/panda.png) | ![ABB IRB 6640](Images/abb_irb6640.png) |
 
 These extensions allow importing of DAE models at runtime using a custom `Collada` parser.
 Most of the time, you will asynchronously load an entity using the static extension methods, for example, if you have a `URL` for a DAE file location:
@@ -17,14 +21,23 @@ let entity: ModelEntity? = await ModelEntity.fromDAEAsset(data: data)
 An optional `options` data structure may be passed to either of these, which can be used to specify whether to use the custom `Collada` parser, or using `SceneKit` as an intermediate step.
 Most of the time, this argument can be omitted, in which case the code will detect which is the best to use.
 
- ## Developer Guidelines
+## Installation
  
- The directories are structured as follows:
+The package may be installed using Swift Package Manager, in XCode, as follows:github.com/radcli14/DAE-to-RealityKit
+1. From the `File` menu, select `Add Package Dependencies`.
+2. In the search bar in the upper right, enter `https://github.com/radcli14/DAE-to-RealityKit`.
+3. Make sure your project is selected in the `Add to Project` line, then click the `Add Package` button in the lower right.
+4. Make sure your target is selected in the `Add to Target` line, then click the `Add Package` button again.
+
+
+## Developer Guidelines
+ 
+The directories are structured as follows:
  - **RealityKit**:: Extensions on `ModelEntity` that allow loading from DAE-formatted XML, as in the quickstart
  - **Collada**: Data structure derived from the COLLADA 1.4.1 Schema, parses from XML using the [XMLCoder](https://github.com/MaxDesiatov/XMLCoder) package
  - **SceneKit**: Extensions on SceneKit objects to provide data that can aid in conversion to RealityKit
  
- ### Note Regarding SceneKit
+### Note Regarding SceneKit
  
 The SceneKit extensions represented an early attempt to simply use the SceneKit DAE loader as an intermediate stage to obtaining the RealityKit entity. 
 This worked in the case that the DAE files are provided in the bundle at comple-time, which XCode automatically converts to scene files. 

@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  Geometries.swift
 //  DAE-to-RealityKit
 //
 //  Created by Eliott Radcliffe on 3/9/26.
@@ -11,20 +11,20 @@ import XMLCoder
 // MARK: - Geometries
 
 extension Collada {
-    public struct LibraryGeometries: Codable, Equatable {
-        public let geometries: [Geometry]
-        
+    struct LibraryGeometries: Codable, Equatable {
+        let geometries: [Geometry]
+
         enum CodingKeys: String, CodingKey {
             case geometries = "geometry"
         }
     }
 
-    public struct Geometry: Codable, Equatable, Identifiable {
-        public var id: String? { geometryId }
+    struct Geometry: Codable, Equatable, Identifiable {
+        var id: String? { geometryId }
 
-        public let geometryId: String?
-        public let name: String?
-        public let mesh: Mesh?
+        let geometryId: String?
+        let name: String?
+        let mesh: Mesh?
 
         enum CodingKeys: String, CodingKey {
             case geometryId = "id"
@@ -35,11 +35,11 @@ extension Collada {
 }
 
 extension Collada.Geometry {
-    public struct Mesh: Codable, Equatable {
-        public let sources: [Source]
-        public let vertices: Vertices?
-        public let triangles: [Triangles]?
-        public let polylist: [Polylist]?
+    struct Mesh: Codable, Equatable {
+        let sources: [Source]
+        let vertices: Vertices?
+        let triangles: [Triangles]?
+        let polylist: [Polylist]?
 
         enum CodingKeys: String, CodingKey {
             case sources = "source"
@@ -48,13 +48,13 @@ extension Collada.Geometry {
             case polylist
         }
     }
-    
-    public struct Source: Codable, Equatable, Identifiable {
-        public var id: String? { sourceId }
 
-        public let sourceId: String?
-        public let floatArray: Collada.FloatArray?
-        public let techniqueCommon: SourceTechniqueCommon?
+    struct Source: Codable, Equatable, Identifiable {
+        var id: String? { sourceId }
+
+        let sourceId: String?
+        let floatArray: Collada.FloatArray?
+        let techniqueCommon: TechniqueCommon?
 
         enum CodingKeys: String, CodingKey {
             case sourceId = "id"
@@ -63,15 +63,15 @@ extension Collada.Geometry {
         }
     }
 
-    public struct SourceTechniqueCommon: Codable, Equatable {
-        public let accessor: Accessor
+    struct TechniqueCommon: Codable, Equatable {
+        let accessor: Accessor
     }
 
-    public struct Accessor: Codable, Equatable {
-        public let source: String
-        public let count: Int
-        public let stride: Int?
-        public let params: [Param]?
+    struct Accessor: Codable, Equatable {
+        let source: String
+        let count: Int
+        let stride: Int?
+        let params: [Param]?
 
         enum CodingKeys: String, CodingKey {
             case source, count, stride
@@ -79,14 +79,14 @@ extension Collada.Geometry {
         }
     }
 
-    public struct Param: Codable, Equatable {
-        public let name: String?
-        public let type: String?
+    struct Param: Codable, Equatable {
+        let name: String?
+        let type: String?
     }
 
-    public struct Vertices: Codable, Equatable {
-        public let id: String?
-        public let inputs: [Input]
+    struct Vertices: Codable, Equatable {
+        let id: String?
+        let inputs: [Input]
 
         enum CodingKeys: String, CodingKey {
             case id
@@ -94,19 +94,18 @@ extension Collada.Geometry {
         }
     }
 
-    public struct Input: Codable, Equatable {
-        public let semantic: String
-        public let source: String
-        public let offset: Int?
-        public let set: Int?
+    struct Input: Codable, Equatable {
+        let semantic: String
+        let source: String
+        let offset: Int?
+        let set: Int?
     }
 
-
-    public struct Triangles: Codable, Equatable {
-        public let count: Int
-        public let material: String?
-        public let inputs: [Input]
-        public let p: Collada.IndexArray
+    struct Triangles: Codable, Equatable {
+        let count: Int
+        let material: String?
+        let inputs: [Input]
+        let p: Collada.IndexArray
 
         enum CodingKeys: String, CodingKey {
             case count, material
@@ -115,12 +114,12 @@ extension Collada.Geometry {
         }
     }
 
-    public struct Polylist: Codable, Equatable {
-        public let count: Int
-        public let material: String?
-        public let inputs: [Input]
-        public let vcount: Collada.IndexArray?
-        public let p: Collada.IndexArray
+    struct Polylist: Codable, Equatable {
+        let count: Int
+        let material: String?
+        let inputs: [Input]
+        let vcount: Collada.IndexArray?
+        let p: Collada.IndexArray
 
         enum CodingKeys: String, CodingKey {
             case count, material
@@ -133,7 +132,7 @@ extension Collada.Geometry {
 // MARK: - DynamicNodeDecoding
 
 extension Collada.Geometry: DynamicNodeDecoding {
-    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+    static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
         switch key.stringValue {
         case "id", "name": return .attribute
         default: return .element
@@ -142,7 +141,7 @@ extension Collada.Geometry: DynamicNodeDecoding {
 }
 
 extension Collada.Geometry.Source: DynamicNodeDecoding {
-    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+    static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
         switch key.stringValue {
         case "id": return .attribute
         default: return .element
@@ -151,7 +150,7 @@ extension Collada.Geometry.Source: DynamicNodeDecoding {
 }
 
 extension Collada.Geometry.Accessor: DynamicNodeDecoding {
-    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+    static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
         switch key.stringValue {
         case "source", "count", "stride": return .attribute
         default: return .element
@@ -160,13 +159,13 @@ extension Collada.Geometry.Accessor: DynamicNodeDecoding {
 }
 
 extension Collada.Geometry.Param: DynamicNodeDecoding {
-    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+    static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
         return .attribute
     }
 }
 
 extension Collada.Geometry.Vertices: DynamicNodeDecoding {
-    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+    static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
         switch key.stringValue {
         case "id": return .attribute
         default: return .element
@@ -175,14 +174,13 @@ extension Collada.Geometry.Vertices: DynamicNodeDecoding {
 }
 
 extension Collada.Geometry.Input: DynamicNodeDecoding {
-    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
-        // All Input fields are XML attributes
+    static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
         return .attribute
     }
 }
 
 extension Collada.Geometry.Triangles: DynamicNodeDecoding {
-    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+    static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
         switch key.stringValue {
         case "count", "material": return .attribute
         default: return .element
@@ -191,7 +189,7 @@ extension Collada.Geometry.Triangles: DynamicNodeDecoding {
 }
 
 extension Collada.Geometry.Polylist: DynamicNodeDecoding {
-    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+    static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
         switch key.stringValue {
         case "count", "material": return .attribute
         default: return .element

@@ -10,26 +10,27 @@ import RealityKit
 import simd
 
 extension Collada {
-    
-    /// A set of root `RawNode` objects representing the base element or elements in the assembly, which themselves may have child nodes.
-    public struct RawScene: Sendable {
-        public var rootNodes: [RawNode]
-        public init(rootNodes: [RawNode]) { self.rootNodes = rootNodes }
+
+    /// A set of root `RawNode` objects representing the base element or elements in the assembly,
+    /// which themselves may have child nodes.
+    struct RawScene: Sendable {
+        var rootNodes: [RawNode]
     }
-    
-    /// A single node in the assembly, which stores transform, mesh, material, and child relationships in the assembly.
-    public struct RawNode: Sendable, Identifiable {
-        public var id: String { name ?? uuid }
+
+    /// A single node in the assembly, which stores transform, mesh, material,
+    /// and child relationships in the assembly.
+    struct RawNode: Sendable, Identifiable {
+        var id: String { name ?? uuid }
         private let uuid = UUID().uuidString
 
-        public var name: String?
+        var name: String?
         /// The node's local transform relative to its parent
-        public var localTransform: simd_float4x4
-        public var mesh: RawMesh?
-        public var diffuseColor: ColorRGBA?
-        public var children: [RawNode]
+        var localTransform: simd_float4x4
+        var mesh: RawMesh?
+        var diffuseColor: ColorRGBA?
+        var children: [RawNode]
 
-        public init(
+        init(
             name: String?,
             localTransform: simd_float4x4,
             mesh: RawMesh? = nil,
@@ -43,22 +44,17 @@ extension Collada {
             self.children = children
         }
     }
-    
-    
+
     /// Stores the positions, normals, uvs, and indices arrays representing a mesh
-    public struct RawMesh: Sendable {
-        public var positions: [SIMD3<Float>]
-        public var normals: [SIMD3<Float>]? = nil
-        public var uvs: [SIMD2<Float>]? = nil
-        public var indices: [UInt32]
-        public init(positions: [SIMD3<Float>], normals: [SIMD3<Float>]? = nil, uvs: [SIMD2<Float>]? = nil, indices: [UInt32]) {
-            self.positions = positions
-            self.normals = normals
-            self.uvs = uvs
-            self.indices = indices
-        }
+    struct RawMesh: Sendable {
+        var positions: [SIMD3<Float>]
+        var normals: [SIMD3<Float>]? = nil
+        var uvs: [SIMD2<Float>]? = nil
+        var indices: [UInt32]
     }
 }
+
+// MARK: - Entity Building
 
 extension Collada.RawNode {
     /// Convert the node data into a RealityKit `ModelEntity`
@@ -68,7 +64,6 @@ extension Collada.RawNode {
         entity.name = name ?? "node"
         entity.transform.matrix = localTransform
 
-        // Attempt to construct a mesh with material, if success, add as a model component
         if let mesh {
             do {
                 let meshResource = try mesh.buildMeshResource(name: name)
@@ -78,16 +73,14 @@ extension Collada.RawNode {
             }
         }
 
-        // Recursively generate entities for all of the children of this node
         for child in children {
-            let childEntity = child.buildEntity()
-            entity.addChild(childEntity)
+            entity.addChild(child.buildEntity())
         }
         return entity
     }
-    
+
     /// Build a RealityKit material using properties from the Collada file
-    var material: SimpleMaterial {
+    private var material: SimpleMaterial {
         var newMaterial = SimpleMaterial()
         if let diffuseColor {
             newMaterial.color.tint = .init(
@@ -102,13 +95,12 @@ extension Collada.RawNode {
 }
 
 extension Collada.RawMesh {
-
     @MainActor
     func buildMeshResource(name: String? = nil) throws -> MeshResource {
         var descriptor = MeshDescriptor(name: name ?? "mesh")
         descriptor.positions = MeshBuffer(positions)
         descriptor.primitives = .triangles(indices)
-        if let normals = normals {
+        if let normals {
             descriptor.normals = MeshBuffer(normals)
         }
         if let uvs {

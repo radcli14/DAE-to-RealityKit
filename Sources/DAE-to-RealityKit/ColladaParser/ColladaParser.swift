@@ -9,14 +9,13 @@ import Foundation
 import XMLCoder
 import simd
 
-public enum ColladaParserError: Error {
+enum ColladaParserError: Error {
     case decodeFailed(Error)
 }
 
-public struct ColladaParser {
-    public init() {}
+struct ColladaParser {
 
-    public func parse(data: Data) throws -> Collada.RawScene {
+    func parse(data: Data) throws -> Collada.RawScene {
         let decoder = XMLDecoder()
         decoder.trimValueWhitespaces = false
         decoder.shouldProcessNamespaces = true
@@ -26,13 +25,9 @@ public struct ColladaParser {
             let up = UpAxis.from(collada.asset?.upAxis)
             let rootTransform = AxisConversion.toYUp(from: up)
 
-            // Index geometry sources by id for resolving instance_geometry references
             let geometryMap = buildGeometryMap(from: collada)
-
-            // Index materials/effects for diffuse color lookup
             let materialColorMap = buildMaterialColorMap(from: collada)
 
-            // Build node hierarchy from the visual scene referenced in <scene>
             let nodes = buildNodes(
                 from: collada,
                 rootTransform: rootTransform,
@@ -47,7 +42,6 @@ public struct ColladaParser {
 
     // MARK: - Geometry Map
 
-    /// Maps geometry id (e.g. "link_1-mesh") to its parsed mesh sources
     private func buildGeometryMap(from collada: Collada) -> [String: Collada.Geometry] {
         guard let lib = collada.libraryGeometries else { return [:] }
         var map: [String: Collada.Geometry] = [:]
@@ -61,9 +55,8 @@ public struct ColladaParser {
 
     // MARK: - Material Color Map
 
-    /// Maps material id to its diffuse RGBA color
-    private func buildMaterialColorMap(from collada: Collada) -> [String: ColorRGBA] {
-        var effectColorMap: [String: ColorRGBA] = [:]
+    private func buildMaterialColorMap(from collada: Collada) -> [String: Collada.ColorRGBA] {
+        var effectColorMap: [String: Collada.ColorRGBA] = [:]
         if let effects = collada.libraryEffects?.effects {
             for effect in effects {
                 if let eId = effect.effectId,
@@ -73,12 +66,12 @@ public struct ColladaParser {
             }
         }
 
-        var materialColorMap: [String: ColorRGBA] = [:]
+        var materialColorMap: [String: Collada.ColorRGBA] = [:]
         if let materials = collada.libraryMaterials?.materials {
             for mat in materials {
                 guard let matId = mat.materialId,
                       let effectUrl = mat.instanceEffect?.url else { continue }
-                let effectId = String(effectUrl.dropFirst()) // remove leading '#'
+                let effectId = String(effectUrl.dropFirst())
                 if let color = effectColorMap[effectId] {
                     materialColorMap[matId] = color
                 }
@@ -93,12 +86,12 @@ public struct ColladaParser {
         from collada: Collada,
         rootTransform: simd_float4x4,
         geometryMap: [String: Collada.Geometry],
-        materialColorMap: [String: ColorRGBA]
+        materialColorMap: [String: Collada.ColorRGBA]
     ) -> [Collada.RawNode] {
         guard let lib = collada.libraryVisualScenes else { return [] }
         let sceneId = collada.scene?.instanceVisualScene?.url
             .trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        let visualScene: VisualScene?
+        let visualScene: Collada.VisualScene?
         if let id = sceneId {
             visualScene = lib.visualScenes.first { $0.visualSceneId == id }
         } else {
@@ -116,24 +109,22 @@ public struct ColladaParser {
     }
 
     private func makeRawNode(
-        _ node: ColladaNode,
+        _ node: Collada.Node,
         parentWorldTransform: simd_float4x4,
         geometryMap: [String: Collada.Geometry],
-        materialColorMap: [String: ColorRGBA]
+        materialColorMap: [String: Collada.ColorRGBA]
     ) -> Collada.RawNode {
         let local = localMatrix(from: node)
         let worldTransform = parentWorldTransform * local
 
-        // Resolve mesh from instance_geometry
         var mesh: Collada.RawMesh? = nil
-        var diffuseColor: ColorRGBA? = nil
+        var diffuseColor: Collada.ColorRGBA? = nil
         if let instances = node.instanceGeometry {
             for inst in instances {
-                let geoId = String(inst.url.dropFirst()) // remove '#'
+                let geoId = String(inst.url.dropFirst())
                 if let geometry = geometryMap[geoId], let colladaMesh = geometry.mesh {
                     mesh = extractMesh(from: colladaMesh)
                 }
-                // Resolve material color
                 if let binds = inst.bindMaterial?.techniqueCommon?.instanceMaterials {
                     for bind in binds {
                         let matId = String(bind.target.dropFirst())
@@ -166,9 +157,7 @@ public struct ColladaParser {
 
     // MARK: - Transform
 
-    /// Build the local transform matrix for a COLLADA node
-    private func localMatrix(from node: ColladaNode) -> simd_float4x4 {
-        // Prefer <matrix> if present
+    private func localMatrix(from node: Collada.Node) -> simd_float4x4 {
         if let m = node.matrix?.values, m.count == 16 {
             // COLLADA matrices are row-major; simd_float4x4 is column-major
             let f = m.map { Float($0) }
@@ -183,12 +172,10 @@ public struct ColladaParser {
         // Compose from TRS: result = T * R * S
         var result = matrix_identity_float4x4
 
-        // Translation
         if let t = node.translate?.first?.values, t.count >= 3 {
             result.columns.3 = SIMD4(Float(t[0]), Float(t[1]), Float(t[2]), 1)
         }
 
-        // Rotations (applied in order they appear in the file)
         if let rotations = node.rotate {
             for r in rotations {
                 let v = r.values
@@ -200,7 +187,6 @@ public struct ColladaParser {
             }
         }
 
-        // Scale
         if let s = node.scale?.first?.values, s.count >= 3 {
             let sx = Float(s[0]), sy = Float(s[1]), sz = Float(s[2])
             let scaleMatrix = simd_float4x4(
@@ -231,9 +217,7 @@ public struct ColladaParser {
 
     // MARK: - Mesh Extraction
 
-    /// Extract positions, normals, UVs, and triangle indices from a COLLADA mesh
     private func extractMesh(from colladaMesh: Collada.Geometry.Mesh) -> Collada.RawMesh? {
-        // Build a source map: "#sourceId" -> Source
         var sourceMap: [String: Collada.Geometry.Source] = [:]
         for src in colladaMesh.sources {
             if let srcId = src.sourceId {
@@ -241,24 +225,20 @@ public struct ColladaParser {
             }
         }
 
-        // Resolve the VERTEX input to its actual position source
         var vertexSourceRef: String? = nil
         if let verts = colladaMesh.vertices {
             if let posInput = verts.inputs.first(where: { $0.semantic == "POSITION" }) {
                 vertexSourceRef = posInput.source
             }
-            // Map the vertices id so VERTEX references resolve correctly
             if let vid = verts.id {
                 sourceMap["#\(vid)"] = sourceMap[vertexSourceRef ?? ""]
             }
         }
 
-        // Process triangles or polylist primitives
         let primitives: [(inputs: [Collada.Geometry.Input], indices: [Int])]
         if let tris = colladaMesh.triangles, !tris.isEmpty {
             primitives = tris.map { ($0.inputs, $0.p.values) }
         } else if let polys = colladaMesh.polylist, !polys.isEmpty {
-            // Convert polylists to triangle fans
             primitives = polys.map { poly in
                 let triangulated = triangulatePolylist(
                     vcount: poly.vcount?.values ?? [],
@@ -271,7 +251,6 @@ public struct ColladaParser {
             return nil
         }
 
-        // Merge all primitives into a single mesh
         var allPositions: [SIMD3<Float>] = []
         var allNormals: [SIMD3<Float>] = []
         var allUVs: [SIMD2<Float>] = []
@@ -284,7 +263,6 @@ public struct ColladaParser {
             guard inputCount > 0 else { continue }
             let vertexCount = pValues.count / inputCount
 
-            // Identify which inputs correspond to what
             var positionInput: (offset: Int, source: Collada.Geometry.Source)?
             var normalInput: (offset: Int, source: Collada.Geometry.Source)?
             var texcoordInput: (offset: Int, source: Collada.Geometry.Source)?
@@ -293,7 +271,6 @@ public struct ColladaParser {
                 let offset = input.offset ?? 0
                 let ref = input.source
 
-                // For VERTEX semantic, resolve through the vertices element
                 let resolvedSource: Collada.Geometry.Source?
                 if input.semantic == "VERTEX" {
                     resolvedSource = sourceMap[vertexSourceRef ?? ""]
@@ -322,7 +299,6 @@ public struct ColladaParser {
             for v in 0..<vertexCount {
                 let baseOffset = v * inputCount
 
-                // Position
                 if let pos = positionInput,
                    let floats = pos.source.floatArray?.values {
                     let idx = pValues[baseOffset + pos.offset]
@@ -333,7 +309,6 @@ public struct ColladaParser {
                     }
                 }
 
-                // Normal
                 if let norm = normalInput,
                    let floats = norm.source.floatArray?.values {
                     let idx = pValues[baseOffset + norm.offset]
@@ -344,7 +319,6 @@ public struct ColladaParser {
                     }
                 }
 
-                // UV
                 if let tex = texcoordInput,
                    let floats = tex.source.floatArray?.values {
                     let idx = pValues[baseOffset + tex.offset]
@@ -369,27 +343,23 @@ public struct ColladaParser {
         )
     }
 
-    /// Triangulate a polylist by treating each polygon as a triangle fan
     private func triangulatePolylist(vcount: [Int], p: [Int], inputCount: Int) -> [Int] {
         var result: [Int] = []
         var offset = 0
         for count in vcount {
-            // Fan triangulation: vertex 0, i, i+1
             for i in 1..<(count - 1) {
                 for j in 0..<inputCount {
-                    result.append(p[offset + j]) // vertex 0
+                    result.append(p[offset + j])
                 }
                 for j in 0..<inputCount {
-                    result.append(p[offset + i * inputCount + j]) // vertex i
+                    result.append(p[offset + i * inputCount + j])
                 }
                 for j in 0..<inputCount {
-                    result.append(p[offset + (i + 1) * inputCount + j]) // vertex i+1
+                    result.append(p[offset + (i + 1) * inputCount + j])
                 }
             }
             offset += count * inputCount
         }
         return result
     }
-
 }
-

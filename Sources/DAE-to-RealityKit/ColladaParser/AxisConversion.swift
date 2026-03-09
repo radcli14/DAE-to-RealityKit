@@ -8,17 +8,17 @@
 import Foundation
 import simd
 
-public enum UpAxis: String, Sendable {
+enum UpAxis: String, Sendable {
     case x = "X_UP"
     case y = "Y_UP"
     case z = "Z_UP"
 
-    public static func from(_ string: String?) -> UpAxis { UpAxis(rawValue: string ?? "Y_UP") ?? .y }
+    static func from(_ string: String?) -> UpAxis { UpAxis(rawValue: string ?? "Y_UP") ?? .y }
 }
 
-public enum AxisConversion {
+enum AxisConversion {
     /// Convert from given COLLADA up-axis to RealityKit's Y-up
-    public static func toYUp(from up: UpAxis) -> simd_float4x4 {
+    static func toYUp(from up: UpAxis) -> simd_float4x4 {
         switch up {
         case .y: return matrix_identity_float4x4
         case .z:
@@ -40,4 +40,3 @@ public enum AxisConversion {
         }
     }
 }
-

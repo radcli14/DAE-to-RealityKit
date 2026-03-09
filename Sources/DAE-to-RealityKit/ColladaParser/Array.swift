@@ -12,17 +12,17 @@ import XMLCoder
 
 extension Collada {
     /// Decodes a whitespace-separated string of floats (e.g. "1.0 2.0 3.0") into [Float]
-    public struct FloatArray: Codable, Equatable {
-        public let id: String?
-        public let count: Int
-        public let values: [Float]
-        
+    struct FloatArray: Codable, Equatable {
+        let id: String?
+        let count: Int
+        let values: [Float]
+
         enum CodingKeys: String, CodingKey {
             case id, count
             case values = ""
         }
-        
-        public init(from decoder: Decoder) throws {
+
+        init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             id = try container.decodeIfPresent(String.self, forKey: .id)
             count = try container.decode(Int.self, forKey: .count)
@@ -30,16 +30,16 @@ extension Collada {
             values = text.split(whereSeparator: \.isWhitespace).compactMap { Float($0) }
         }
     }
-    
+
     /// Decodes a whitespace-separated string of integers (e.g. "0 1 2 3") into [Int]
-    public struct IndexArray: Codable, Equatable {
-        public let values: [Int]
-        
+    struct IndexArray: Codable, Equatable {
+        let values: [Int]
+
         enum CodingKeys: String, CodingKey {
             case values = ""
         }
-        
-        public init(from decoder: Decoder) throws {
+
+        init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             let text = try container.decode(String.self, forKey: .values)
             values = text.split(whereSeparator: \.isWhitespace).compactMap { Int($0) }
@@ -47,9 +47,8 @@ extension Collada {
     }
 }
 
-
 extension Collada.FloatArray: DynamicNodeDecoding {
-    public static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+    static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
         switch key.stringValue {
         case "id", "count": return .attribute
         default: return .element

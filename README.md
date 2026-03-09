@@ -1,6 +1,6 @@
 # DAE-to-RealityKit
 Extensions to convert 3D models in DAE format to RealityKit entities.
-This repository is developed as part of the [Augmented Reality Mobile Robotics (ARMOR) project](armor.dc-engineer.com).
+This repository is developed as part of the [Augmented Reality Mobile Robotics (ARMOR) project](https://armor.dc-engineer.com).
 Below are examples of Universal Robot Description Format (URDF) files containing DAE models, which have been loaded using this utility, and rendered in ARMOR.
 
 | Anymal | Panda | ABB IRB 6640 |

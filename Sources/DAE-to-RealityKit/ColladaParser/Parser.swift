@@ -25,17 +25,13 @@ extension Collada {
 
             do {
                 let collada = try decoder.decode(Collada.self, from: data)
-                let up = UpAxis.from(collada.asset?.upAxis)
-                let rootTransform = AxisConversion.toYUp(from: up)
+                //let up = UpAxis.from(collada.asset?.upAxis)
+                //let rootTransform = AxisConversion.toYUp(from: up)
 
-                let geometryMap = buildGeometryMap(from: collada)
-                let imageMap = buildImageMap(from: collada)
-                let materialMap = buildMaterialMap(from: collada, imageMap: imageMap)
+                let materialMap = buildMaterialMap(from: collada)
 
                 let nodes = buildNodes(
                     from: collada,
-                    rootTransform: rootTransform,
-                    geometryMap: geometryMap,
                     materialMap: materialMap
                 )
                 return Scene(rootNodes: nodes)
@@ -44,37 +40,10 @@ extension Collada {
             }
         }
 
-    // MARK: - Geometry Map
-
-    private func buildGeometryMap(from collada: Collada) -> [String: Collada.Geometry] {
-        guard let lib = collada.libraryGeometries else { return [:] }
-        var map: [String: Collada.Geometry] = [:]
-        for geo in lib.geometries {
-            if let geoId = geo.geometryId {
-                map[geoId] = geo
-            }
-        }
-        return map
-    }
-
-    // MARK: - Image Map
-
-    private func buildImageMap(from collada: Collada) -> [String: String] {
-        guard let images = collada.libraryImages?.images else { return [:] }
-        var map: [String: String] = [:]
-        for image in images {
-            if let imageId = image.imageId, let path = image.initFrom {
-                map[imageId] = path
-            }
-        }
-        return map
-    }
-
     // MARK: - Material Map
 
     private func buildMaterialMap(
         from collada: Collada,
-        imageMap: [String: String]
     ) -> [String: Material] {
         // Build effect → Material map
         var effectMap: [String: Material] = [:]
@@ -89,7 +58,7 @@ extension Collada {
                     texturePath = resolveTexturePath(
                         samplerSid: texRef.texture,
                         newparams: effect.profileCommon?.newparams,
-                        imageMap: imageMap
+                        imageMap: collada.imageMap
                     )
                 }
 
@@ -144,8 +113,6 @@ extension Collada {
 
     private func buildNodes(
         from collada: Collada,
-        rootTransform: simd_float4x4,
-        geometryMap: [String: Collada.Geometry],
         materialMap: [String: Material]
     ) -> [Node] {
         guard let lib = collada.libraryVisualScenes else { return [] }
@@ -161,8 +128,8 @@ extension Collada {
         return vs.nodes.map { node in
             makeNode(
                 node,
-                parentWorldTransform: rootTransform,
-                geometryMap: geometryMap,
+                parentWorldTransform: collada.rootTransform,
+                geometryMap: collada.geometryMap,
                 materialMap: materialMap
             )
         }

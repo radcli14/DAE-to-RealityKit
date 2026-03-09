@@ -32,6 +32,18 @@ extension Collada {
             case mesh
         }
     }
+    
+    /// Builds the geometry map for this `Collada` object, which is a dictionary of `String` to `Collada.Geometry`
+    var geometryMap: [String: Geometry] {
+        guard let libraryGeometries else { return [:] }
+        var map: [String: Geometry] = [:]
+        for geo in libraryGeometries.geometries {
+            if let geoId = geo.geometryId {
+                map[geoId] = geo
+            }
+        }
+        return map
+    }
 }
 
 extension Collada.Geometry {

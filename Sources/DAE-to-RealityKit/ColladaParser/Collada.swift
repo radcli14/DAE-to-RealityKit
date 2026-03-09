@@ -1,5 +1,5 @@
 //
-//  ColladaModels.swift
+//  Collada.swift
 //  DAE-to-RealityKit
 //
 //  Created by Eliott Radcliffe on 3/8/26.
@@ -36,39 +36,6 @@ extension Collada: DynamicNodeDecoding {
     static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
         switch key.stringValue {
         case "version": return .attribute
-        default: return .element
-        }
-    }
-}
-
-// MARK: - Images
-
-extension Collada {
-    struct LibraryImages: Codable, Equatable {
-        let images: [Image]?
-
-        enum CodingKeys: String, CodingKey {
-            case images = "image"
-        }
-    }
-
-    struct Image: Codable, Equatable {
-        let imageId: String?
-        let name: String?
-        let initFrom: String?
-
-        enum CodingKeys: String, CodingKey {
-            case imageId = "id"
-            case name
-            case initFrom = "init_from"
-        }
-    }
-}
-
-extension Collada.Image: DynamicNodeDecoding {
-    static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
-        switch key.stringValue {
-        case "id", "name": return .attribute
         default: return .element
         }
     }

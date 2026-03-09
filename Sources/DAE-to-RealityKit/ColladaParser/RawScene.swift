@@ -27,20 +27,20 @@ extension Collada {
         /// The node's local transform relative to its parent
         var localTransform: simd_float4x4
         var mesh: RawMesh?
-        var diffuseColor: ColorRGBA?
+        var material: RawMaterial?
         var children: [RawNode]
 
         init(
             name: String?,
             localTransform: simd_float4x4,
             mesh: RawMesh? = nil,
-            diffuseColor: ColorRGBA? = nil,
+            material: RawMaterial? = nil,
             children: [RawNode] = []
         ) {
             self.name = name
             self.localTransform = localTransform
             self.mesh = mesh
-            self.diffuseColor = diffuseColor
+            self.material = material
             self.children = children
         }
     }
@@ -51,6 +51,18 @@ extension Collada {
         var normals: [SIMD3<Float>]? = nil
         var uvs: [SIMD2<Float>]? = nil
         var indices: [UInt32]
+    }
+
+    /// Stores the visual material properties extracted from the COLLADA effect
+    struct RawMaterial: Sendable {
+        var diffuseColor: ColorRGBA?
+        var diffuseTexturePath: String?
+        var emissionColor: ColorRGBA?
+        var ambientColor: ColorRGBA?
+        var specularColor: ColorRGBA?
+        /// COLLADA shininess (0–128 typical), converted to roughness = 1 - (shininess / 128)
+        var shininess: Float?
+        var transparency: Float?
     }
 }
 
@@ -67,7 +79,7 @@ extension Collada.RawNode {
         if let mesh {
             do {
                 let meshResource = try mesh.buildMeshResource(name: name)
-                entity.model = ModelComponent(mesh: meshResource, materials: [material])
+                entity.model = ModelComponent(mesh: meshResource, materials: [buildMaterial()])
             } catch {
                 print("Failed to generate mesh for node '\(name ?? "?")': \(error)")
             }
@@ -79,18 +91,55 @@ extension Collada.RawNode {
         return entity
     }
 
-    /// Build a RealityKit material using properties from the Collada file
-    private var material: SimpleMaterial {
-        var newMaterial = SimpleMaterial()
-        if let diffuseColor {
-            newMaterial.color.tint = .init(
-                red: CGFloat(diffuseColor.r),
-                green: CGFloat(diffuseColor.g),
-                blue: CGFloat(diffuseColor.b),
-                alpha: CGFloat(diffuseColor.a)
-            )
+    /// Build a RealityKit `PhysicallyBasedMaterial` from the raw material properties
+    private func buildMaterial() -> PhysicallyBasedMaterial {
+        var pbr = PhysicallyBasedMaterial()
+
+        if let mat = material {
+            // Base color (diffuse)
+            if let dc = mat.diffuseColor {
+                pbr.baseColor.tint = .init(
+                    red: CGFloat(dc.r),
+                    green: CGFloat(dc.g),
+                    blue: CGFloat(dc.b),
+                    alpha: CGFloat(dc.a)
+                )
+            }
+
+            // Emissive color
+            if let ec = mat.emissionColor, (ec.r > 0 || ec.g > 0 || ec.b > 0) {
+                pbr.emissiveColor = .init(
+                    color: .init(
+                        red: CGFloat(ec.r),
+                        green: CGFloat(ec.g),
+                        blue: CGFloat(ec.b),
+                        alpha: 1.0
+                    )
+                )
+                pbr.emissiveIntensity = 1.0
+            }
+
+            // Roughness derived from shininess
+            // COLLADA shininess typically ranges 0–128; higher = shinier = lower roughness
+            if let shininess = mat.shininess {
+                let clamped = min(max(shininess, 0), 128)
+                pbr.roughness = .init(floatLiteral: 1.0 - (clamped / 128.0))
+            }
+
+            // Specular
+            if let sc = mat.specularColor {
+                // Use the luminance of the specular color as the specular scale
+                let luminance = 0.2126 * sc.r + 0.7152 * sc.g + 0.0722 * sc.b
+                pbr.specular = .init(floatLiteral: luminance)
+            }
+
+            // Transparency (COLLADA: 1.0 = fully transparent, RealityKit: alpha blending)
+            if let transparency = mat.transparency, transparency > 0 {
+                pbr.blending = .transparent(opacity: .init(floatLiteral: 1.0 - transparency))
+            }
         }
-        return newMaterial
+
+        return pbr
     }
 }
 

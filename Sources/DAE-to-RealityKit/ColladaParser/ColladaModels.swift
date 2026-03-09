@@ -13,6 +13,7 @@ import XMLCoder
 struct Collada: Codable, Equatable {
     let version: String?
     let asset: Asset?
+    let libraryImages: LibraryImages?
     let libraryEffects: LibraryEffects?
     let libraryMaterials: LibraryMaterials?
     let libraryGeometries: LibraryGeometries?
@@ -22,6 +23,7 @@ struct Collada: Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case version
         case asset
+        case libraryImages = "library_images"
         case libraryEffects = "library_effects"
         case libraryMaterials = "library_materials"
         case libraryGeometries = "library_geometries"
@@ -34,6 +36,39 @@ extension Collada: DynamicNodeDecoding {
     static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
         switch key.stringValue {
         case "version": return .attribute
+        default: return .element
+        }
+    }
+}
+
+// MARK: - Images
+
+extension Collada {
+    struct LibraryImages: Codable, Equatable {
+        let images: [Image]?
+
+        enum CodingKeys: String, CodingKey {
+            case images = "image"
+        }
+    }
+
+    struct Image: Codable, Equatable {
+        let imageId: String?
+        let name: String?
+        let initFrom: String?
+
+        enum CodingKeys: String, CodingKey {
+            case imageId = "id"
+            case name
+            case initFrom = "init_from"
+        }
+    }
+}
+
+extension Collada.Image: DynamicNodeDecoding {
+    static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "id", "name": return .attribute
         default: return .element
         }
     }

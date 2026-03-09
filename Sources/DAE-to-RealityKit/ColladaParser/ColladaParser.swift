@@ -26,13 +26,14 @@ struct ColladaParser {
             let rootTransform = AxisConversion.toYUp(from: up)
 
             let geometryMap = buildGeometryMap(from: collada)
-            let materialColorMap = buildMaterialColorMap(from: collada)
+            let imageMap = buildImageMap(from: collada)
+            let materialMap = buildMaterialMap(from: collada, imageMap: imageMap)
 
             let nodes = buildNodes(
                 from: collada,
                 rootTransform: rootTransform,
                 geometryMap: geometryMap,
-                materialColorMap: materialColorMap
+                materialMap: materialMap
             )
             return Collada.RawScene(rootNodes: nodes)
         } catch {
@@ -53,31 +54,87 @@ struct ColladaParser {
         return map
     }
 
-    // MARK: - Material Color Map
+    // MARK: - Image Map
 
-    private func buildMaterialColorMap(from collada: Collada) -> [String: Collada.ColorRGBA] {
-        var effectColorMap: [String: Collada.ColorRGBA] = [:]
+    private func buildImageMap(from collada: Collada) -> [String: String] {
+        guard let images = collada.libraryImages?.images else { return [:] }
+        var map: [String: String] = [:]
+        for image in images {
+            if let imageId = image.imageId, let path = image.initFrom {
+                map[imageId] = path
+            }
+        }
+        return map
+    }
+
+    // MARK: - Material Map
+
+    private func buildMaterialMap(
+        from collada: Collada,
+        imageMap: [String: String]
+    ) -> [String: Collada.RawMaterial] {
+        // Build effect → RawMaterial map
+        var effectMap: [String: Collada.RawMaterial] = [:]
         if let effects = collada.libraryEffects?.effects {
             for effect in effects {
-                if let eId = effect.effectId,
-                   let color = effect.profileCommon?.technique?.diffuseColor {
-                    effectColorMap[eId] = color
+                guard let eId = effect.effectId,
+                      let technique = effect.profileCommon?.technique else { continue }
+
+                // Resolve texture sampler → surface → image → file path
+                var texturePath: String? = nil
+                if let texRef = technique.diffuseTexture {
+                    texturePath = resolveTexturePath(
+                        samplerSid: texRef.texture,
+                        newparams: effect.profileCommon?.newparams,
+                        imageMap: imageMap
+                    )
                 }
+
+                effectMap[eId] = Collada.RawMaterial(
+                    diffuseColor: technique.diffuseColor,
+                    diffuseTexturePath: texturePath,
+                    emissionColor: technique.emissionColor,
+                    ambientColor: technique.ambientColor,
+                    specularColor: technique.specularColor,
+                    shininess: technique.shininess,
+                    transparency: technique.transparency
+                )
             }
         }
 
-        var materialColorMap: [String: Collada.ColorRGBA] = [:]
+        // Map material ids to their resolved effect's RawMaterial
+        var materialMap: [String: Collada.RawMaterial] = [:]
         if let materials = collada.libraryMaterials?.materials {
             for mat in materials {
                 guard let matId = mat.materialId,
                       let effectUrl = mat.instanceEffect?.url else { continue }
                 let effectId = String(effectUrl.dropFirst())
-                if let color = effectColorMap[effectId] {
-                    materialColorMap[matId] = color
+                if let rawMat = effectMap[effectId] {
+                    materialMap[matId] = rawMat
                 }
             }
         }
-        return materialColorMap
+        return materialMap
+    }
+
+    /// Resolves the COLLADA texture pipeline: sampler → surface → image → file path
+    private func resolveTexturePath(
+        samplerSid: String,
+        newparams: [Collada.Effect.NewParam]?,
+        imageMap: [String: String]
+    ) -> String? {
+        guard let params = newparams else { return nil }
+
+        // Find sampler newparam → get its source (surface sid)
+        let sampler = params.first { $0.sid == samplerSid }
+        guard let surfaceSid = sampler?.sampler2D?.source else { return nil }
+
+        // Find surface newparam → get its init_from (image id)
+        let surface = params.first { $0.sid == surfaceSid }
+        guard let imageId = surface?.surface?.initFrom else { return nil }
+
+        // Look up image id in the image map
+        return imageMap[imageId]
     }
 
     // MARK: - Node Hierarchy
@@ -86,7 +143,7 @@ struct ColladaParser {
         from collada: Collada,
         rootTransform: simd_float4x4,
         geometryMap: [String: Collada.Geometry],
-        materialColorMap: [String: Collada.ColorRGBA]
+        materialMap: [String: Collada.RawMaterial]
     ) -> [Collada.RawNode] {
         guard let lib = collada.libraryVisualScenes else { return [] }
         let sceneId = collada.scene?.instanceVisualScene?.url
@@ -103,7 +160,7 @@ struct ColladaParser {
                 node,
                 parentWorldTransform: rootTransform,
                 geometryMap: geometryMap,
-                materialColorMap: materialColorMap
+                materialMap: materialMap
             )
         }
     }
@@ -112,13 +169,13 @@ struct ColladaParser {
         _ node: Collada.Node,
         parentWorldTransform: simd_float4x4,
         geometryMap: [String: Collada.Geometry],
-        materialColorMap: [String: Collada.ColorRGBA]
+        materialMap: [String: Collada.RawMaterial]
     ) -> Collada.RawNode {
         let local = localMatrix(from: node)
         let worldTransform = parentWorldTransform * local
 
         var mesh: Collada.RawMesh? = nil
-        var diffuseColor: Collada.ColorRGBA? = nil
+        var rawMaterial: Collada.RawMaterial? = nil
         if let instances = node.instanceGeometry {
             for inst in instances {
                 let geoId = String(inst.url.dropFirst())
@@ -128,8 +185,8 @@ struct ColladaParser {
                 if let binds = inst.bindMaterial?.techniqueCommon?.instanceMaterials {
                     for bind in binds {
                         let matId = String(bind.target.dropFirst())
-                        if let color = materialColorMap[matId] {
-                            diffuseColor = color
+                        if let mat = materialMap[matId] {
+                            rawMaterial = mat
                             break
                         }
                     }
@@ -142,7 +199,7 @@ struct ColladaParser {
                 $0,
                 parentWorldTransform: worldTransform,
                 geometryMap: geometryMap,
-                materialColorMap: materialColorMap
+                materialMap: materialMap
             )
         }
 
@@ -150,7 +207,7 @@ struct ColladaParser {
             name: node.name ?? node.nodeId,
             localTransform: local,
             mesh: mesh,
-            diffuseColor: diffuseColor,
+            material: rawMaterial,
             children: children
         )
     }

@@ -48,9 +48,9 @@ public struct ColladaParser {
     // MARK: - Geometry Map
 
     /// Maps geometry id (e.g. "link_1-mesh") to its parsed mesh sources
-    private func buildGeometryMap(from collada: Collada) -> [String: Geometry] {
+    private func buildGeometryMap(from collada: Collada) -> [String: Collada.Geometry] {
         guard let lib = collada.libraryGeometries else { return [:] }
-        var map: [String: Geometry] = [:]
+        var map: [String: Collada.Geometry] = [:]
         for geo in lib.geometries {
             if let geoId = geo.geometryId {
                 map[geoId] = geo
@@ -92,7 +92,7 @@ public struct ColladaParser {
     private func buildNodes(
         from collada: Collada,
         rootTransform: simd_float4x4,
-        geometryMap: [String: Geometry],
+        geometryMap: [String: Collada.Geometry],
         materialColorMap: [String: ColorRGBA]
     ) -> [Collada.RawNode] {
         guard let lib = collada.libraryVisualScenes else { return [] }
@@ -118,7 +118,7 @@ public struct ColladaParser {
     private func makeRawNode(
         _ node: ColladaNode,
         parentWorldTransform: simd_float4x4,
-        geometryMap: [String: Geometry],
+        geometryMap: [String: Collada.Geometry],
         materialColorMap: [String: ColorRGBA]
     ) -> Collada.RawNode {
         let local = localMatrix(from: node)
@@ -232,9 +232,9 @@ public struct ColladaParser {
     // MARK: - Mesh Extraction
 
     /// Extract positions, normals, UVs, and triangle indices from a COLLADA mesh
-    private func extractMesh(from colladaMesh: ColladaMesh) -> Collada.RawMesh? {
+    private func extractMesh(from colladaMesh: Collada.Geometry.Mesh) -> Collada.RawMesh? {
         // Build a source map: "#sourceId" -> Source
-        var sourceMap: [String: Source] = [:]
+        var sourceMap: [String: Collada.Geometry.Source] = [:]
         for src in colladaMesh.sources {
             if let srcId = src.sourceId {
                 sourceMap["#\(srcId)"] = src
@@ -254,7 +254,7 @@ public struct ColladaParser {
         }
 
         // Process triangles or polylist primitives
-        let primitives: [(inputs: [Input], indices: [Int])]
+        let primitives: [(inputs: [Collada.Geometry.Input], indices: [Int])]
         if let tris = colladaMesh.triangles, !tris.isEmpty {
             primitives = tris.map { ($0.inputs, $0.p.values) }
         } else if let polys = colladaMesh.polylist, !polys.isEmpty {
@@ -285,16 +285,16 @@ public struct ColladaParser {
             let vertexCount = pValues.count / inputCount
 
             // Identify which inputs correspond to what
-            var positionInput: (offset: Int, source: Source)?
-            var normalInput: (offset: Int, source: Source)?
-            var texcoordInput: (offset: Int, source: Source)?
+            var positionInput: (offset: Int, source: Collada.Geometry.Source)?
+            var normalInput: (offset: Int, source: Collada.Geometry.Source)?
+            var texcoordInput: (offset: Int, source: Collada.Geometry.Source)?
 
             for input in inputs {
                 let offset = input.offset ?? 0
                 let ref = input.source
 
                 // For VERTEX semantic, resolve through the vertices element
-                let resolvedSource: Source?
+                let resolvedSource: Collada.Geometry.Source?
                 if input.semantic == "VERTEX" {
                     resolvedSource = sourceMap[vertexSourceRef ?? ""]
                 } else {

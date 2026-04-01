@@ -17,7 +17,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/MaxDesiatov/XMLCoder", from: "0.17.0")
+        .package(url: "https://github.com/CoreOffice/XMLCoder.git", from: "0.17.0")
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.

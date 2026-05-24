@@ -287,3 +287,71 @@ extension Collada.Geometry.Polylist: DynamicNodeDecoding {
         }
     }
 }
+
+// MARK: - DynamicNodeEncoding
+
+extension Collada.Geometry: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "id", "name": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Geometry.Source: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "id": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Geometry.Accessor: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "source", "count", "stride": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Geometry.Param: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        return .attribute
+    }
+}
+
+extension Collada.Geometry.Vertices: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "id": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Geometry.Input: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        return .attribute
+    }
+}
+
+extension Collada.Geometry.Triangles: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "count", "material": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Geometry.Polylist: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "count", "material": return .attribute
+        default: return .element
+        }
+    }
+}

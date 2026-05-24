@@ -55,6 +55,15 @@ extension Collada: DynamicNodeDecoding {
     }
 }
 
+extension Collada: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "version": return .attribute
+        default: return .element
+        }
+    }
+}
+
 // MARK: - Asset
 
 extension Collada {
@@ -101,6 +110,12 @@ extension Collada {
 
 extension Collada.InstanceVisualScene: DynamicNodeDecoding {
     static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        return .attribute
+    }
+}
+
+extension Collada.InstanceVisualScene: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
         return .attribute
     }
 }

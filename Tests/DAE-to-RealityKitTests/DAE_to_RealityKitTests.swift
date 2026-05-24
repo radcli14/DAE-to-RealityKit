@@ -110,6 +110,21 @@ func verifyEntityHasMesh(_ entity: Entity, label: String) {
     await verifyEntityHasMesh(customEntity, label: "link_1 (custom url)")
 }
 
+@Test func testWriteAndReloadDAE() async throws {
+    let entity = await MainActor.run { ModelEntity(mesh: .generateBox(size: 0.1)) }
+    let tmpURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("dae")
+    defer { try? FileManager.default.removeItem(at: tmpURL) }
+
+    try await entity.writeDAEAsset(to: tmpURL)
+    #expect(FileManager.default.fileExists(atPath: tmpURL.path), "DAE file should exist after write")
+
+    let loaded = await ModelEntity.fromDAEAsset(url: tmpURL)
+    #expect(loaded != nil, "Should reload entity from written DAE file")
+}
+
+
 @Test func testLoadLink1DaeFromRawData() async throws {
     guard let url = Bundle.module.url(forResource: "link_1", withExtension: "dae") else {
         Issue.record("Failed to get URL for link_1.dae test resource")

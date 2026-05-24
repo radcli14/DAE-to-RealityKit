@@ -158,11 +158,22 @@ extension Collada {
             case sid
         }
 
+        init(values: [Double], sid: String? = nil) {
+            self.values = values
+            self.sid = sid
+        }
+
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             sid = try container.decodeIfPresent(String.self, forKey: .sid)
             let text = try container.decode(String.self, forKey: .values)
             values = text.split(whereSeparator: \.isWhitespace).compactMap { Double($0) }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(sid, forKey: .sid)
+            try container.encode(values.map { String($0) }.joined(separator: " "), forKey: .values)
         }
     }
 
@@ -181,11 +192,22 @@ extension Collada {
             case values = ""
         }
 
+        init(sid: String? = nil, values: [Double]) {
+            self.sid = sid
+            self.values = values
+        }
+
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             sid = try container.decodeIfPresent(String.self, forKey: .sid)
             let text = try container.decode(String.self, forKey: .values)
             values = text.split(whereSeparator: \.isWhitespace).compactMap { Double($0) }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(sid, forKey: .sid)
+            try container.encode(values.map { String($0) }.joined(separator: " "), forKey: .values)
         }
     }
 
@@ -205,11 +227,22 @@ extension Collada {
             case values = ""
         }
 
+        init(sid: String? = nil, values: [Double]) {
+            self.sid = sid
+            self.values = values
+        }
+
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             sid = try container.decodeIfPresent(String.self, forKey: .sid)
             let text = try container.decode(String.self, forKey: .values)
             values = text.split(whereSeparator: \.isWhitespace).compactMap { Double($0) }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encodeIfPresent(sid, forKey: .sid)
+            try container.encode(values.map { String($0) }.joined(separator: " "), forKey: .values)
         }
     }
 }
@@ -269,6 +302,68 @@ extension Collada.Vector3: DynamicNodeDecoding {
 
 extension Collada.Rotation: DynamicNodeDecoding {
     static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "sid": return .attribute
+        default: return .element
+        }
+    }
+}
+
+// MARK: - DynamicNodeEncoding
+
+extension Collada.VisualScene: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "id", "name": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Node: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "id", "sid", "name", "type": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.InstanceGeometry: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "url", "name": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.InstanceMaterial: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        return .attribute
+    }
+}
+
+extension Collada.Matrix4x4: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "sid": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Vector3: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "sid": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Rotation: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
         switch key.stringValue {
         case "sid": return .attribute
         default: return .element

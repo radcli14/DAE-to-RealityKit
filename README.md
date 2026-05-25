@@ -22,12 +22,36 @@ An optional `options` data structure may be passed to either of these, which can
 Most of the time, this argument can be omitted, in which case the code will detect which is the best to use.
 
 ## Installation
- 
-The package may be installed using Swift Package Manager, in XCode, as follows:github.com/radcli14/DAE-to-RealityKit
+
+### Xcode
+
 1. From the `File` menu, select `Add Package Dependencies`.
 2. In the search bar in the upper right, enter `https://github.com/radcli14/DAE-to-RealityKit`.
 3. Make sure your project is selected in the `Add to Project` line, then click the `Add Package` button in the lower right.
 4. Make sure your target is selected in the `Add to Target` line, then click the `Add Package` button again.
+
+### Swift Package Manager
+
+Add the package to your `Package.swift` dependencies:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/radcli14/DAE-to-RealityKit", from: "0.5.0")
+]
+```
+
+Then add `"DAE-to-RealityKit"` to your target's dependencies:
+
+```swift
+.target(
+    name: "YourTarget",
+    dependencies: [
+        .product(name: "DAE-to-RealityKit", package: "DAE-to-RealityKit")
+    ]
+)
+```
+
+Requires iOS 18+ or macOS 15+.
 
 
 ## Developer Guidelines

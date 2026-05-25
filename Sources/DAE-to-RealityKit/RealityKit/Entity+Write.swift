@@ -53,7 +53,7 @@ public extension Entity {
 
                         // Build normals source if available
                         var normalsSource: Collada.Geometry.Source? = nil
-                        if let normals = part.normals, !normals.isEmpty {
+                        if let normals = part.normals {
                             let normalsArray = Array(normals)
                             let flatNormals = normalsArray.flatMap { [$0.x, $0.y, $0.z] }
                             normalsSource = Collada.Geometry.Source(
@@ -80,7 +80,7 @@ public extension Entity {
 
                         // Build UV source if available
                         var uvSource: Collada.Geometry.Source? = nil
-                        if let textureCoordinates = part.textureCoordinates, !textureCoordinates.isEmpty {
+                        if let textureCoordinates = part.textureCoordinates {
                             let uvsArray = Array(textureCoordinates)
                             let flatUVs = uvsArray.flatMap { [$0.x, $0.y] }
                             uvSource = Collada.Geometry.Source(
@@ -139,7 +139,8 @@ public extension Entity {
                         }
 
                         // Build interleaved p index array: each vertex index repeated inputOffset times
-                        let rawIndices = Array(part.triangleIndices)
+                        guard let triangleIndicesBuffer = part.triangleIndices else { continue }
+                        let rawIndices = Array(triangleIndicesBuffer)
                         let interleavedP = rawIndices.flatMap { idx in
                             Array(repeating: Int(idx), count: inputOffset)
                         }

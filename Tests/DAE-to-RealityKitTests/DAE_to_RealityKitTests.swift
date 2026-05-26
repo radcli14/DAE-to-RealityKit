@@ -63,10 +63,7 @@ func verifyEntityHasMesh(_ entity: Entity, label: String) {
     let data = try Data(contentsOf: url)
     print("📦 Loaded \(data.count) bytes from bundle")
 
-    let entity = await ModelEntity.fromDAEAsset(data: data)
-    #expect(entity != nil, "Entity should be loaded successfully")
-    guard let entity else { return }
-
+    let entity = try await ModelEntity.fromDAEAsset(data: data)
     await verifyEntityHasMesh(entity, label: "anymal_base (data)")
 }
 
@@ -79,13 +76,7 @@ func verifyEntityHasMesh(_ entity: Entity, label: String) {
 
     #expect(FileManager.default.fileExists(atPath: url.path), "url: \(url.absoluteString) does not exist")
 
-    let entity = await ModelEntity.fromDAEAsset(url: url)
-    #expect(entity != nil, "Entity failed to load from \(url.absoluteString)")
-    guard let entity else {
-        print("⚠️ URL-based entity load failed (likely due to sandbox permissions)")
-        return
-    }
-
+    let entity = try await ModelEntity.fromDAEAsset(url: url)
     await verifyEntityHasMesh(entity, label: "anymal_base (url)")
 }
 
@@ -98,15 +89,10 @@ func verifyEntityHasMesh(_ entity: Entity, label: String) {
 
     #expect(FileManager.default.fileExists(atPath: url.path), "url: \(url.absoluteString) does not exist")
 
-    let entity = await ModelEntity.fromDAEAsset(url: url)
-    #expect(entity != nil, "Entity should be loaded successfully from link_1.dae")
-    guard let entity else { return }
-
+    let entity = try await ModelEntity.fromDAEAsset(url: url)
     await verifyEntityHasMesh(entity, label: "link_1")
-    
-    let customEntity = await ModelEntity.fromDAEAsset(url: url, options: .init(loader: .custom))
-    #expect(customEntity != nil, "customEntity should be loaded successfully from link_1.dae")
-    guard let customEntity else { return }
+
+    let customEntity = try await ModelEntity.fromDAEAsset(url: url, options: .init(loader: .custom))
     await verifyEntityHasMesh(customEntity, label: "link_1 (custom url)")
 }
 
@@ -120,8 +106,8 @@ func verifyEntityHasMesh(_ entity: Entity, label: String) {
     try await entity.writeDAEAsset(to: tmpURL)
     #expect(FileManager.default.fileExists(atPath: tmpURL.path), "DAE file should exist after write")
 
-    let loaded = await ModelEntity.fromDAEAsset(url: tmpURL)
-    #expect(loaded != nil, "Should reload entity from written DAE file")
+    let loaded = try await ModelEntity.fromDAEAsset(url: tmpURL)
+    _ = loaded
 }
 
 
@@ -135,15 +121,10 @@ func verifyEntityHasMesh(_ entity: Entity, label: String) {
     print("Loaded \(data.count) bytes of raw DAE data")
 
     // Load with explicit custom parser from raw Data
-    let customEntity = await ModelEntity.fromDAEAsset(data: data, options: .init(loader: .custom))
-    #expect(customEntity != nil, "Custom parser should load from raw Data")
-    guard let customEntity else { return }
+    let customEntity = try await ModelEntity.fromDAEAsset(data: data, options: .init(loader: .custom))
     await verifyEntityHasMesh(customEntity, label: "link_1 (custom data)")
 
     // Load with auto-detection from raw Data — should detect XML and use custom parser
-    let autoEntity = await ModelEntity.fromDAEAsset(data: data)
-    #expect(autoEntity != nil, "Auto-detect should load raw DAE Data")
-    guard let autoEntity else { return }
+    let autoEntity = try await ModelEntity.fromDAEAsset(data: data)
     await verifyEntityHasMesh(autoEntity, label: "link_1 (auto data)")
 }
-

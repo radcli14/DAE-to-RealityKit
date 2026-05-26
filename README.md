@@ -8,18 +8,22 @@ Below are examples of Universal Robot Description Format (URDF) files containing
 | ![Anymal](Images/anymal.png) | ![Panda](Images/panda.png) | ![ABB IRB 6640](Images/abb_irb6640.png) |
 
 These extensions allow importing of DAE models at runtime using a custom `Collada` parser.
-Most of the time, you will asynchronously load an entity using the static extension methods, for example, if you have a `URL` for a DAE file location:
+Both loading methods are `async throws` — they return a non-optional `ModelEntity` on success and throw a `DAEImportError` on failure.
+
+Load from a `URL`:
 ```swift
-let entity: ModelEntity? = await ModelEntity.fromDAEAsset(url: url)
+let entity: ModelEntity = try await ModelEntity.fromDAEAsset(url: url)
 ```
 
-Alternately, if you have already loaded the file as a Swift `Data` object (i.e., `Data(contentsOf: url)`:
+Load from a `Data` object (e.g. `Data(contentsOf: url)`):
 ```swift
-let entity: ModelEntity? = await ModelEntity.fromDAEAsset(data: data)
+let entity: ModelEntity = try await ModelEntity.fromDAEAsset(data: data)
 ```
 
-An optional `options` data structure may be passed to either of these, which can be used to specify whether to use the custom `Collada` parser, or using `SceneKit` as an intermediate step.
-Most of the time, this argument can be omitted, in which case the code will detect which is the best to use.
+An optional `DAEImportOptions` parameter controls which parser is used. The default `.auto` loader inspects the data to choose between the custom COLLADA parser and SceneKit, with automatic fallback if the first attempt fails. Pass `.custom` or `.sceneKit` to force a specific parser:
+```swift
+let entity: ModelEntity = try await ModelEntity.fromDAEAsset(url: url, options: .init(loader: .custom))
+```
 
 ## Installation
 

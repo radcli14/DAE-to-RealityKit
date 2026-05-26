@@ -241,7 +241,6 @@ public extension Entity {
             withRootKey: "COLLADA",
             rootAttributes: [
                 "xmlns": "http://www.collada.org/2005/11/COLLADASchema",
-                "version": "1.4.1",
             ]
         )
         try data.write(to: url)

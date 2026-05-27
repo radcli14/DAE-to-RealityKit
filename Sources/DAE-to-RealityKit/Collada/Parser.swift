@@ -92,6 +92,7 @@ extension Collada {
                     ambientColor: technique.ambientColor,
                     specularColor: technique.specularColor,
                     shininess: technique.shininess,
+                    transparentColor: technique.transparentColor,
                     transparency: technique.transparency
                 )
             }

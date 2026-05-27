@@ -86,9 +86,13 @@ extension Collada.Parser.Node {
                 pbr.specular = .init(floatLiteral: luminance)
             }
 
-            // Transparency (COLLADA: 1.0 = fully transparent, RealityKit: alpha blending)
-            if let transparency = mat.transparency, transparency > 0 {
-                pbr.blending = .transparent(opacity: .init(floatLiteral: 1.0 - transparency))
+            // Opacity: COLLADA A_ONE convention (the default) — opacity = transparent.alpha × transparency,
+            // where 1.0 means fully opaque. Only enable transparent blending when opacity < 1.
+            let transparentAlpha = mat.transparentColor?.a ?? 1.0
+            let transparency = mat.transparency ?? 1.0
+            let opacity = transparentAlpha * transparency
+            if opacity < 1.0 {
+                pbr.blending = .transparent(opacity: .init(floatLiteral: opacity))
             }
         }
 

@@ -83,7 +83,10 @@ extension Collada.Parser {
         var specularColor: Collada.ColorRGBA?
         /// Shininess exponent from the effect (typically 0–128). Converted to roughness as `1 - (shininess / 128)`.
         var shininess: Float?
-        /// Transparency value (0 = opaque, 1 = fully transparent) from the effect's `<transparency>` property.
+        /// The `<transparent>` color from the effect. In A_ONE mode (COLLADA default) the alpha
+        /// channel indicates opaqueness: alpha=1 is fully opaque, alpha=0 is transparent.
+        var transparentColor: Collada.ColorRGBA?
+        /// Scalar multiplier from `<transparency>`. Final opacity = `transparent.alpha × transparency`.
         var transparency: Float?
     }
 }

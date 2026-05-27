@@ -128,3 +128,79 @@ func verifyEntityHasMesh(_ entity: Entity, label: String) {
     let autoEntity = try await ModelEntity.fromDAEAsset(data: data)
     await verifyEntityHasMesh(autoEntity, label: "link_1 (auto data)")
 }
+
+
+// MARK: - Duck.dae Material Tests
+
+/// Parses Duck.dae and returns the first node with a material, or records a failure.
+private func parseDuckMaterial() throws -> Collada.Parser.Material? {
+    guard let url = Bundle.module.url(forResource: "Duck", withExtension: "dae") else {
+        Issue.record("Failed to get URL for Duck.dae test resource")
+        return nil
+    }
+    let data = try Data(contentsOf: url)
+    let scene = try Collada.Parser().parse(data: data)
+
+    func findMaterial(in nodes: [Collada.Parser.Node]) -> Collada.Parser.Material? {
+        for node in nodes {
+            if let mat = node.material { return mat }
+            if let found = findMaterial(in: node.children) { return found }
+        }
+        return nil
+    }
+    return findMaterial(in: scene.rootNodes)
+}
+
+@Test func testDuckMaterialTransparencyIsFullyOpaque() throws {
+    guard let mat = try parseDuckMaterial() else { return }
+
+    // Duck.dae uses COLLADA A_ONE convention: opacity = transparent.alpha × transparency
+    // Both values are 1.0, so the duck must be fully opaque (no transparent blending).
+    let transparentAlpha = mat.transparentColor?.a ?? 1.0
+    let transparency = mat.transparency ?? 1.0
+    let opacity = transparentAlpha * transparency
+
+    #expect(opacity == 1.0, "Duck opacity should be 1.0 (fully opaque); got \(opacity)")
+    #expect(mat.transparentColor?.a == 1.0, "Duck transparent alpha should be 1.0")
+    #expect(mat.transparency == 1.0, "Duck transparency scalar should be 1.0")
+}
+
+@Test func testDuckMaterialEmissionIsBlack() throws {
+    guard let mat = try parseDuckMaterial() else { return }
+
+    // Duck has no self-illumination; emission should be black (r=g=b=0).
+    let ec = mat.emissionColor
+    #expect(ec?.r == 0.0, "Duck emission red should be 0")
+    #expect(ec?.g == 0.0, "Duck emission green should be 0")
+    #expect(ec?.b == 0.0, "Duck emission blue should be 0")
+}
+
+@Test func testDuckMaterialSpecularIsBlack() throws {
+    guard let mat = try parseDuckMaterial() else { return }
+
+    // Duck specular color is black (r=g=b=0).
+    let sc = mat.specularColor
+    #expect(sc?.r == 0.0, "Duck specular red should be 0")
+    #expect(sc?.g == 0.0, "Duck specular green should be 0")
+    #expect(sc?.b == 0.0, "Duck specular blue should be 0")
+}
+
+@Test func testDuckMaterialShininessValue() throws {
+    guard let mat = try parseDuckMaterial() else { return }
+
+    guard let shininess = mat.shininess else {
+        Issue.record("Duck shininess should not be nil")
+        return
+    }
+    #expect(abs(shininess - 0.3) < 0.001, "Duck shininess should be ~0.3; got \(shininess)")
+}
+
+@Test func testDuckMaterialDiffuseTexturePathIsResolved() throws {
+    guard let mat = try parseDuckMaterial() else { return }
+
+    guard let path = mat.diffuseTexturePath else {
+        Issue.record("Duck diffuse texture path should not be nil")
+        return
+    }
+    #expect(path.contains("DuckCM"), "Duck diffuse texture path should reference DuckCM; got '\(path)'")
+}

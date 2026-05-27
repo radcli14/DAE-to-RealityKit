@@ -79,7 +79,9 @@ extension Collada.Effect {
         var specularColor: Collada.ColorRGBA? { shading?.specular?.color }
         /// The shininess exponent from the active shading model.
         var shininess: Float? { shading?.shininess?.float }
-        /// The transparency value (0 = opaque, 1 = fully transparent).
+        /// The `<transparent>` color (A_ONE convention: alpha=1 → opaque, alpha=0 → transparent).
+        var transparentColor: Collada.ColorRGBA? { shading?.transparent?.color }
+        /// Scalar multiplier from `<transparency>`. Opacity = `transparent.alpha × transparency`.
         var transparency: Float? { shading?.transparency?.float }
         /// The index of refraction for the material surface.
         var indexOfRefraction: Float? { shading?.indexOfRefraction?.float }
@@ -151,6 +153,10 @@ protocol ShadingProperties {
     var diffuse: Collada.Effect.Technique.ColorOrTextureProperty? { get }
     var specular: Collada.Effect.Technique.ColorOrTextureProperty? { get }
     var shininess: Collada.Effect.Technique.FloatProperty? { get }
+    /// The transparent color/texture (`<transparent>`). In A_ONE mode (default) the alpha
+    /// channel indicates opaqueness: alpha=1 means fully opaque, alpha=0 means transparent.
+    var transparent: Collada.Effect.Technique.ColorOrTextureProperty? { get }
+    /// Scalar multiplier on `<transparent>`. Combined as `opacity = transparent.alpha × transparency`.
     var transparency: Collada.Effect.Technique.FloatProperty? { get }
     var indexOfRefraction: Collada.Effect.Technique.FloatProperty? { get }
 }
@@ -166,11 +172,12 @@ extension Collada.Effect.Technique {
         let diffuse: ColorOrTextureProperty?
         let specular: ColorOrTextureProperty?
         let shininess: FloatProperty?
+        let transparent: ColorOrTextureProperty?
         let transparency: FloatProperty?
         let indexOfRefraction: FloatProperty?
 
         enum CodingKeys: String, CodingKey {
-            case emission, ambient, diffuse, specular, shininess, transparency
+            case emission, ambient, diffuse, specular, shininess, transparent, transparency
             case indexOfRefraction = "index_of_refraction"
         }
     }
@@ -185,11 +192,12 @@ extension Collada.Effect.Technique {
         let diffuse: ColorOrTextureProperty?
         let specular: ColorOrTextureProperty?
         let shininess: FloatProperty?
+        let transparent: ColorOrTextureProperty?
         let transparency: FloatProperty?
         let indexOfRefraction: FloatProperty?
 
         enum CodingKeys: String, CodingKey {
-            case emission, ambient, diffuse, specular, shininess, transparency
+            case emission, ambient, diffuse, specular, shininess, transparent, transparency
             case indexOfRefraction = "index_of_refraction"
         }
     }
@@ -204,11 +212,12 @@ extension Collada.Effect.Technique {
         let diffuse: ColorOrTextureProperty?
         let specular: ColorOrTextureProperty?
         let shininess: FloatProperty?
+        let transparent: ColorOrTextureProperty?
         let transparency: FloatProperty?
         let indexOfRefraction: FloatProperty?
 
         enum CodingKeys: String, CodingKey {
-            case emission, ambient, diffuse, specular, shininess, transparency
+            case emission, ambient, diffuse, specular, shininess, transparent, transparency
             case indexOfRefraction = "index_of_refraction"
         }
     }

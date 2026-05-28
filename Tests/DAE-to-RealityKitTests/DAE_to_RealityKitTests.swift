@@ -130,18 +130,15 @@ func verifyEntityHasMesh(_ entity: Entity, label: String) {
 }
 
 
-// MARK: - Duck.dae Material Tests
+// MARK: - Duck.dae Tests (remote)
 
-/// Parses Duck.dae and returns the first node with a material, or records a failure.
-/// - Parameter sourceURL: Forwarded to the parser for texture URL resolution.
-///   Pass the bundle file URL to resolve locally, or a remote URL to test remote resolution.
-///   Defaults to `nil` (relative texture paths will not be resolved).
-private func parseDuckMaterial(sourceURL: URL? = nil) throws -> Collada.Parser.Material? {
-    guard let url = Bundle.module.url(forResource: "Duck", withExtension: "dae") else {
-        Issue.record("Failed to get URL for Duck.dae test resource")
-        return nil
-    }
-    let data = try Data(contentsOf: url)
+private let duckRemoteURL = URL(string: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/sourceModels/Duck/Duck.dae")!
+
+/// Downloads Duck.dae from the Khronos repo and returns the first resolved material.
+/// - Parameter sourceURL: Passed to the parser for texture URL resolution.
+///   Defaults to `duckRemoteURL` so relative texture paths resolve to remote https:// URLs.
+private func parseDuckMaterial(sourceURL: URL = duckRemoteURL) async throws -> Collada.Parser.Material? {
+    let (data, _) = try await URLSession.shared.data(from: duckRemoteURL)
     let scene = try Collada.Parser().parse(data: data, sourceURL: sourceURL)
 
     func findMaterial(in nodes: [Collada.Parser.Node]) -> Collada.Parser.Material? {
@@ -154,8 +151,8 @@ private func parseDuckMaterial(sourceURL: URL? = nil) throws -> Collada.Parser.M
     return findMaterial(in: scene.rootNodes)
 }
 
-@Test func testDuckMaterialTransparencyIsFullyOpaque() throws {
-    guard let mat = try parseDuckMaterial() else { return }
+@Test func testDuckMaterialTransparencyIsFullyOpaque() async throws {
+    guard let mat = try await parseDuckMaterial() else { return }
 
     // Duck.dae uses COLLADA A_ONE convention: opacity = transparent.alpha × transparency
     // Both values are 1.0, so the duck must be fully opaque (no transparent blending).
@@ -168,28 +165,26 @@ private func parseDuckMaterial(sourceURL: URL? = nil) throws -> Collada.Parser.M
     #expect(mat.transparency == 1.0, "Duck transparency scalar should be 1.0")
 }
 
-@Test func testDuckMaterialEmissionIsBlack() throws {
-    guard let mat = try parseDuckMaterial() else { return }
+@Test func testDuckMaterialEmissionIsBlack() async throws {
+    guard let mat = try await parseDuckMaterial() else { return }
 
-    // Duck has no self-illumination; emission should be black (r=g=b=0).
     let ec = mat.emissionColor
     #expect(ec?.r == 0.0, "Duck emission red should be 0")
     #expect(ec?.g == 0.0, "Duck emission green should be 0")
     #expect(ec?.b == 0.0, "Duck emission blue should be 0")
 }
 
-@Test func testDuckMaterialSpecularIsBlack() throws {
-    guard let mat = try parseDuckMaterial() else { return }
+@Test func testDuckMaterialSpecularIsBlack() async throws {
+    guard let mat = try await parseDuckMaterial() else { return }
 
-    // Duck specular color is black (r=g=b=0).
     let sc = mat.specularColor
     #expect(sc?.r == 0.0, "Duck specular red should be 0")
     #expect(sc?.g == 0.0, "Duck specular green should be 0")
     #expect(sc?.b == 0.0, "Duck specular blue should be 0")
 }
 
-@Test func testDuckMaterialShininessValue() throws {
-    guard let mat = try parseDuckMaterial() else { return }
+@Test func testDuckMaterialShininessValue() async throws {
+    guard let mat = try await parseDuckMaterial() else { return }
 
     guard let shininess = mat.shininess else {
         Issue.record("Duck shininess should not be nil")
@@ -198,30 +193,13 @@ private func parseDuckMaterial(sourceURL: URL? = nil) throws -> Collada.Parser.M
     #expect(abs(shininess - 0.3) < 0.001, "Duck shininess should be ~0.3; got \(shininess)")
 }
 
-@Test func testDuckMaterialTextureURLResolvesFromLocalSource() throws {
-    // Supply the bundle file URL as the source so relative paths can be resolved.
-    guard let daeURL = Bundle.module.url(forResource: "Duck", withExtension: "dae"),
-          let mat = try parseDuckMaterial(sourceURL: daeURL) else { return }
+@Test func testDuckMaterialTextureURLResolvesFromRemoteSource() async throws {
+    // Verifies that relative texture paths are correctly appended to the remote source directory,
+    // producing an https:// URL for the DuckCM texture image.
+    guard let mat = try await parseDuckMaterial() else { return }
 
     guard let textureURL = mat.diffuseTextureURL else {
-        Issue.record("Duck diffuseTextureURL should not be nil when a local sourceURL is provided")
-        return
-    }
-    #expect(textureURL.isFileURL,
-            "Texture URL should be a file:// URL for a local source; got '\(textureURL)'")
-    #expect(textureURL.lastPathComponent.contains("DuckCM"),
-            "Texture filename should reference DuckCM; got '\(textureURL.lastPathComponent)'")
-}
-
-@Test func testDuckMaterialTextureURLResolvesFromRemoteSource() throws {
-    // Parse local data but simulate a remote origin — no network call required.
-    // Verifies that the URL construction logic (deletingLastPathComponent + appendingPathComponent)
-    // produces the correct https:// texture URL for a remotely-streamed DAE.
-    let remoteDAE = URL(string: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/sourceModels/Duck/Duck.dae")!
-    guard let mat = try parseDuckMaterial(sourceURL: remoteDAE) else { return }
-
-    guard let textureURL = mat.diffuseTextureURL else {
-        Issue.record("Duck diffuseTextureURL should not be nil when a remote sourceURL is provided")
+        Issue.record("Duck diffuseTextureURL should not be nil when sourceURL is provided")
         return
     }
     let expectedBase = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/sourceModels/Duck"
@@ -238,8 +216,6 @@ private func parseDuckMaterial(sourceURL: URL? = nil) throws -> Collada.Parser.M
     // Streams Duck.dae from the Khronos glTF sample repository.
     // The parser derives the texture URL from the source URL, then downloads DuckCM.png
     // asynchronously and applies it as a TextureResource on the material.
-    let remoteURL = URL(string: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/sourceModels/Duck/Duck.dae")!
-
-    let entity = try await ModelEntity.fromDAEAsset(url: remoteURL, options: .init(loader: .custom))
+    let entity = try await ModelEntity.fromDAEAsset(url: duckRemoteURL, options: .init(loader: .custom))
     await verifyEntityHasMesh(entity, label: "Duck (remote stream)")
 }

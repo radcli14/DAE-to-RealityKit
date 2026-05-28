@@ -133,13 +133,16 @@ func verifyEntityHasMesh(_ entity: Entity, label: String) {
 // MARK: - Duck.dae Material Tests
 
 /// Parses Duck.dae and returns the first node with a material, or records a failure.
-private func parseDuckMaterial() throws -> Collada.Parser.Material? {
+/// - Parameter sourceURL: Forwarded to the parser for texture URL resolution.
+///   Pass the bundle file URL to resolve locally, or a remote URL to test remote resolution.
+///   Defaults to `nil` (relative texture paths will not be resolved).
+private func parseDuckMaterial(sourceURL: URL? = nil) throws -> Collada.Parser.Material? {
     guard let url = Bundle.module.url(forResource: "Duck", withExtension: "dae") else {
         Issue.record("Failed to get URL for Duck.dae test resource")
         return nil
     }
     let data = try Data(contentsOf: url)
-    let scene = try Collada.Parser().parse(data: data)
+    let scene = try Collada.Parser().parse(data: data, sourceURL: sourceURL)
 
     func findMaterial(in nodes: [Collada.Parser.Node]) -> Collada.Parser.Material? {
         for node in nodes {
@@ -195,12 +198,48 @@ private func parseDuckMaterial() throws -> Collada.Parser.Material? {
     #expect(abs(shininess - 0.3) < 0.001, "Duck shininess should be ~0.3; got \(shininess)")
 }
 
-@Test func testDuckMaterialDiffuseTexturePathIsResolved() throws {
-    guard let mat = try parseDuckMaterial() else { return }
+@Test func testDuckMaterialTextureURLResolvesFromLocalSource() throws {
+    // Supply the bundle file URL as the source so relative paths can be resolved.
+    guard let daeURL = Bundle.module.url(forResource: "Duck", withExtension: "dae"),
+          let mat = try parseDuckMaterial(sourceURL: daeURL) else { return }
 
-    guard let path = mat.diffuseTexturePath else {
-        Issue.record("Duck diffuse texture path should not be nil")
+    guard let textureURL = mat.diffuseTextureURL else {
+        Issue.record("Duck diffuseTextureURL should not be nil when a local sourceURL is provided")
         return
     }
-    #expect(path.contains("DuckCM"), "Duck diffuse texture path should reference DuckCM; got '\(path)'")
+    #expect(textureURL.isFileURL,
+            "Texture URL should be a file:// URL for a local source; got '\(textureURL)'")
+    #expect(textureURL.lastPathComponent.contains("DuckCM"),
+            "Texture filename should reference DuckCM; got '\(textureURL.lastPathComponent)'")
+}
+
+@Test func testDuckMaterialTextureURLResolvesFromRemoteSource() throws {
+    // Parse local data but simulate a remote origin — no network call required.
+    // Verifies that the URL construction logic (deletingLastPathComponent + appendingPathComponent)
+    // produces the correct https:// texture URL for a remotely-streamed DAE.
+    let remoteDAE = URL(string: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/sourceModels/Duck/Duck.dae")!
+    guard let mat = try parseDuckMaterial(sourceURL: remoteDAE) else { return }
+
+    guard let textureURL = mat.diffuseTextureURL else {
+        Issue.record("Duck diffuseTextureURL should not be nil when a remote sourceURL is provided")
+        return
+    }
+    let expectedBase = "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/sourceModels/Duck"
+    #expect(textureURL.absoluteString.hasPrefix(expectedBase),
+            "Texture URL should be under the remote source directory; got '\(textureURL.absoluteString)'")
+    #expect(textureURL.lastPathComponent.contains("DuckCM"),
+            "Texture filename should reference DuckCM; got '\(textureURL.lastPathComponent)'")
+}
+
+
+// MARK: - Remote Streaming
+
+@Test func testLoadDuckDaeFromRemoteURL() async throws {
+    // Streams Duck.dae from the Khronos glTF sample repository.
+    // The parser derives the texture URL from the source URL, then downloads DuckCM.png
+    // asynchronously and applies it as a TextureResource on the material.
+    let remoteURL = URL(string: "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/sourceModels/Duck/Duck.dae")!
+
+    let entity = try await ModelEntity.fromDAEAsset(url: remoteURL, options: .init(loader: .custom))
+    await verifyEntityHasMesh(entity, label: "Duck (remote stream)")
 }

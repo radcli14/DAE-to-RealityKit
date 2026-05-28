@@ -34,10 +34,14 @@ extension Collada {
         ///
         /// Decodes the XML, resolves material and texture references, builds the node
         /// hierarchy with transforms, and extracts mesh geometry.
-        /// - Parameter data: Raw XML data of the COLLADA document.
+        /// - Parameters:
+        ///   - data: Raw XML data of the COLLADA document.
+        ///   - sourceURL: The URL from which the DAE was loaded, used to resolve relative texture paths.
+        ///     Pass a `file://` URL for local assets or an `http(s)://` URL for remotely streamed assets.
+        ///     When `nil`, only absolute texture URLs can be resolved.
         /// - Returns: A ``Scene`` containing the parsed node hierarchy.
         /// - Throws: ``Error/decodeFailed(_:)`` if XML decoding fails.
-        func parse(data: Data) throws -> Scene {
+        func parse(data: Data, sourceURL: URL? = nil) throws -> Scene {
             let decoder = XMLDecoder()
             decoder.trimValueWhitespaces = false
             decoder.shouldProcessNamespaces = true
@@ -47,7 +51,7 @@ extension Collada {
                 //let up = UpAxis.from(collada.asset?.upAxis)
                 //let rootTransform = AxisConversion.toYUp(from: up)
 
-                let materialMap = buildMaterialMap(from: collada)
+                let materialMap = buildMaterialMap(from: collada, sourceURL: sourceURL)
 
                 let nodes = buildNodes(
                     from: collada,
@@ -65,8 +69,13 @@ extension Collada {
     ///
     /// Walks `<library_effects>` to extract shading properties and resolve texture paths,
     /// then maps each `<material>` ID to its effect's resolved material.
+    /// - Parameters:
+    ///   - collada: The decoded COLLADA document.
+    ///   - sourceURL: Origin URL of the DAE file, used to turn relative texture paths into
+    ///     absolute `file://` or `http(s)://` URLs. See ``resolveTextureURL(path:sourceURL:)``.
     private func buildMaterialMap(
         from collada: Collada,
+        sourceURL: URL? = nil
     ) -> [String: Material] {
         // Build effect → Material map
         var effectMap: [String: Material] = [:]
@@ -75,19 +84,20 @@ extension Collada {
                 guard let eId = effect.effectId,
                       let technique = effect.profileCommon?.technique else { continue }
 
-                // Resolve texture sampler → surface → image → file path
-                var texturePath: String? = nil
-                if let texRef = technique.diffuseTexture {
-                    texturePath = resolveTexturePath(
-                        samplerSid: texRef.texture,
-                        newparams: effect.profileCommon?.newparams,
-                        imageMap: collada.imageMap
-                    )
+                // Resolve texture sampler → surface → image → absolute URL
+                var textureURL: URL? = nil
+                if let texRef = technique.diffuseTexture,
+                   let path = resolveTexturePath(
+                       samplerSid: texRef.texture,
+                       newparams: effect.profileCommon?.newparams,
+                       imageMap: collada.imageMap
+                   ) {
+                    textureURL = resolveTextureURL(path: path, sourceURL: sourceURL)
                 }
 
                 effectMap[eId] = Material(
                     diffuseColor: technique.diffuseColor,
-                    diffuseTexturePath: texturePath,
+                    diffuseTextureURL: textureURL,
                     emissionColor: technique.emissionColor,
                     ambientColor: technique.ambientColor,
                     specularColor: technique.specularColor,
@@ -111,6 +121,25 @@ extension Collada {
             }
         }
         return materialMap
+    }
+
+    /// Converts a texture path string from `<init_from>` into an absolute URL.
+    ///
+    /// Resolution priority:
+    /// 1. If `path` already contains a URL scheme (e.g. `https://` or `file://`), return it as-is.
+    /// 2. Otherwise treat it as a path relative to `sourceURL`'s directory:
+    ///    - Local `file://` source → produces a local `file://` texture URL.
+    ///    - Remote `http(s)://` source → appends the relative path to the source's base URL,
+    ///      enabling transparent network texture fetching.
+    /// 3. If `sourceURL` is `nil` and the path has no scheme, returns `nil`.
+    private func resolveTextureURL(path: String, sourceURL: URL?) -> URL? {
+        // Already a fully-qualified URL — use it directly.
+        if let url = URL(string: path), url.scheme != nil {
+            return url
+        }
+        // Relative path: resolve against the directory that contains the DAE file.
+        guard let source = sourceURL else { return nil }
+        return source.deletingLastPathComponent().appendingPathComponent(path)
     }
 
     /// Resolves the COLLADA texture pipeline: sampler → surface → image → file path.

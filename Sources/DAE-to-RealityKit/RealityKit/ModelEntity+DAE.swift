@@ -75,6 +75,10 @@ public extension ModelEntity {
     /// `.auto` loader the URL path is tried via `SCNScene(url:)` first, falling back to the
     /// custom COLLADA parser on failure.
     ///
+    /// The source URL is forwarded to the custom parser so that relative texture references
+    /// in `<library_images>` can be resolved — either to sibling local files (for `file://`
+    /// sources) or to remote network resources (for `http(s)://` sources).
+    ///
     /// - Throws: `DAEImportError` if all applicable parsers fail.
     @MainActor
     static func fromDAEAsset(url: URL, options: DAEImportOptions = .init()) async throws -> ModelEntity {
@@ -84,7 +88,7 @@ public extension ModelEntity {
             guard let data = try? Data(contentsOf: url) else {
                 throw DAEImportError.dataReadFailed(url)
             }
-            return try await fromDAEAsset(data: data, options: options)
+            return try await fromDataUsingCustomDAEParser(data, sourceURL: url)
         }
 
         // For .sceneKit or .auto, try SCNScene(url:) first — handles both raw DAE (macOS)
@@ -101,11 +105,12 @@ public extension ModelEntity {
             }
         }
 
-        // .auto fallback: read data and use data-based loading with auto-detection.
+        // .auto fallback: SceneKit failed, so try the custom parser.
+        // Pass the source URL so relative texture paths can still be resolved.
         guard let data = try? Data(contentsOf: url) else {
             throw DAEImportError.dataReadFailed(url)
         }
-        return try await fromDAEAsset(data: data, options: options)
+        return try await fromDataUsingCustomDAEParser(data, sourceURL: url)
     }
 
     /// Creates a `ModelEntity` from a loaded `SCNScene`.
@@ -156,14 +161,19 @@ public extension ModelEntity {
         return await fromSCNScene(scene)
     }
 
+    /// - Parameter sourceURL: Optional origin of the DAE data; forwarded to the parser so that
+    ///   relative texture paths in `<library_images>` can be resolved to absolute local or remote URLs.
     @MainActor
-    private static func fromDataUsingCustomDAEParser(_ data: Data) async throws -> ModelEntity {
+    private static func fromDataUsingCustomDAEParser(
+        _ data: Data,
+        sourceURL: URL? = nil
+    ) async throws -> ModelEntity {
         let parser = Collada.Parser()
         do {
-            let raw = try parser.parse(data: data)
+            let raw = try parser.parse(data: data, sourceURL: sourceURL)
             let root = ModelEntity()
             for node in raw.rootNodes {
-                root.addChild(node.buildEntity())
+                root.addChild(await node.buildEntity())
             }
             return root
         } catch {

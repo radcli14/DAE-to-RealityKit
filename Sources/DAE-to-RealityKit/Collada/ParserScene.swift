@@ -73,8 +73,9 @@ extension Collada.Parser {
     struct Material: Sendable {
         /// Diffuse color from the effect's shading model (`<diffuse>` → `<color>`).
         var diffuseColor: Collada.ColorRGBA?
-        /// Resolved file path for the diffuse texture, if the effect uses `<diffuse>` → `<texture>`.
-        var diffuseTexturePath: String?
+        /// Resolved URL for the diffuse texture, if the effect uses `<diffuse>` → `<texture>`.
+        /// May be a local `file://` URL or a remote `http(s)://` URL when the source DAE was fetched remotely.
+        var diffuseTextureURL: URL?
         /// Self-illumination color from the effect's `<emission>` property.
         var emissionColor: Collada.ColorRGBA?
         /// Ambient color from the effect's `<ambient>` property.

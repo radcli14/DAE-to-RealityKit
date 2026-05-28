@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import ImageIO
 import RealityKit
 
 // MARK: - Entity Building
@@ -15,9 +16,9 @@ extension Collada.Parser.Node {
     ///
     /// Creates a `ModelEntity` with the node's local transform, generates a `MeshResource`
     /// from the mesh data (if present), applies a `PhysicallyBasedMaterial` from the
-    /// material properties, and recursively builds child entities.
+    /// material properties (including async texture loading), and recursively builds child entities.
     @MainActor
-    func buildEntity() -> ModelEntity {
+    func buildEntity() async -> ModelEntity {
         let entity = ModelEntity()
         entity.name = name ?? "node"
         entity.transform.matrix = localTransform
@@ -25,14 +26,14 @@ extension Collada.Parser.Node {
         if let mesh {
             do {
                 let meshResource = try mesh.buildMeshResource(name: name)
-                entity.model = ModelComponent(mesh: meshResource, materials: [buildMaterial()])
+                entity.model = ModelComponent(mesh: meshResource, materials: [await buildMaterial()])
             } catch {
                 print("Failed to generate mesh for node '\(name ?? "?")': \(error)")
             }
         }
 
         for child in children {
-            entity.addChild(child.buildEntity())
+            entity.addChild(await child.buildEntity())
         }
         return entity
     }
@@ -40,16 +41,19 @@ extension Collada.Parser.Node {
     /// Builds a RealityKit `PhysicallyBasedMaterial` from the parsed COLLADA material properties.
     ///
     /// Maps COLLADA shading properties to PBR parameters:
-    /// - Diffuse color → `baseColor.tint`
+    /// - Diffuse color → `baseColor.tint` (used as fallback when texture is absent or fails to load)
+    /// - Diffuse texture → `baseColor` texture, loaded from a local or remote URL
     /// - Emission color → `emissiveColor` + `emissiveIntensity`
     /// - Shininess → `roughness` (inverted: `1 - shininess/128`)
     /// - Specular color → `specular` (using luminance)
     /// - Transparency → `blending` with alpha opacity
-    private func buildMaterial() -> PhysicallyBasedMaterial {
+    @MainActor
+    private func buildMaterial() async -> PhysicallyBasedMaterial {
         var pbr = PhysicallyBasedMaterial()
 
         if let mat = material {
-            // Base color (diffuse)
+            // Base color (diffuse) — set as tint first so it acts as a fallback
+            // if the texture URL is absent or fails to load.
             if let dc = mat.diffuseColor {
                 pbr.baseColor.tint = .init(
                     red: CGFloat(dc.r),
@@ -57,6 +61,13 @@ extension Collada.Parser.Node {
                     blue: CGFloat(dc.b),
                     alpha: CGFloat(dc.a)
                 )
+            }
+
+            // Texture — async load from local file or remote URL.
+            // Overwrites the tint-only baseColor on success; leaves it unchanged on failure.
+            if let textureURL = mat.diffuseTextureURL,
+               let texture = await loadTexture(from: textureURL) {
+                pbr.baseColor = .init(texture: .init(texture))
             }
 
             // Emissive color
@@ -97,6 +108,48 @@ extension Collada.Parser.Node {
         }
 
         return pbr
+    }
+
+    /// Loads a `TextureResource` from a local file or remote URL.
+    ///
+    /// Resolution cascade:
+    /// 1. **Local file URL** — delegates directly to `TextureResource(contentsOf:)`.
+    /// 2. **Remote URL** (`http`/`https`) — downloads the image data via `URLSession`, decodes it
+    ///    with ImageIO, then creates the texture from the resulting `CGImage`.
+    /// 3. **Failure** — logs a diagnostic message and returns `nil` so callers fall back to the
+    ///    flat color material without crashing.
+    @MainActor
+    private func loadTexture(from url: URL) async -> TextureResource? {
+        do {
+            if url.isFileURL {
+                return try await TextureResource(
+                    contentsOf: url,
+                    withName: url.lastPathComponent,
+                    options: .init(semantic: .color)
+                )
+            }
+
+            // Remote URL: download → decode → create TextureResource
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else {
+                print("Texture fetch failed for \(url.lastPathComponent): non-2xx response")
+                return nil
+            }
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                print("Texture decode failed for \(url.lastPathComponent): not a valid image")
+                return nil
+            }
+            return try await TextureResource(
+                image: cgImage,
+                withName: url.lastPathComponent,
+                options: .init(semantic: .color)
+            )
+        } catch {
+            print("Texture load failed (\(url.lastPathComponent)): \(error)")
+            return nil
+        }
     }
 }
 

@@ -5,7 +5,10 @@
 //  Created by Eliott Radcliffe on 3/9/26.
 //
 
+import CoreGraphics
 import Foundation
+import ImageIO
+import Metal
 import RealityKit
 import XMLCoder
 
@@ -18,14 +21,20 @@ public extension Entity {
     func writeDAEAsset(to url: URL) async throws {
         var geometries: [Collada.Geometry] = []
         var nodes: [Collada.Node] = []
+        var colladaImages: [Collada.Image] = []
+        var colladaEffects: [Collada.Effect] = []
+        var colladaMaterials: [Collada.Material] = []
         var geoIndex = 0
 
-        func visit(_ entity: Entity) {
+        func visit(_ entity: Entity) async {
             if let modelEntity = entity as? ModelEntity, let model = modelEntity.model {
+                let pbr = model.materials.first as? PhysicallyBasedMaterial
+
                 for rkModel in model.mesh.contents.models {
                     for part in rkModel.parts {
                         let geoId = "geometry-\(geoIndex)"
-                        geoIndex += 1
+                        let matId = "mat-\(geoIndex)"
+                        let effectId = "effect-\(geoIndex)"
 
                         // Build positions source
                         let positionsArray = Array(part.positions)
@@ -104,12 +113,11 @@ public extension Entity {
                             )
                         }
 
-                        // Collect sources
+                        // Collect sources and build interleaved inputs
                         var sources = [positionsSource]
                         if let normalsSource { sources.append(normalsSource) }
                         if let uvSource { sources.append(uvSource) }
 
-                        // Build interleaved inputs; VERTEX is always offset 0
                         var inputs: [Collada.Geometry.Input] = [
                             Collada.Geometry.Input(
                                 semantic: "VERTEX",
@@ -138,11 +146,125 @@ public extension Entity {
                             inputOffset += 1
                         }
 
-                        // Build interleaved p index array: each vertex index repeated inputOffset times
                         guard let triangleIndicesBuffer = part.triangleIndices else { continue }
                         let rawIndices = Array(triangleIndicesBuffer)
                         let interleavedP = rawIndices.flatMap { idx in
                             Array(repeating: Int(idx), count: inputOffset)
+                        }
+
+                        // Extract PBR material and build COLLADA material structures
+                        var bindMaterial: Collada.BindMaterial? = nil
+                        if let pbr {
+                            var newparams: [Collada.Effect.NewParam] = []
+
+                            // Registers a texture, appends to colladaImages + newparams, returns a texture property.
+                            func makeTextureProperty(_ resource: TextureResource, suffix: String) async -> Collada.Effect.Technique.ColorOrTextureProperty? {
+                                guard let dataURI = await encodeTextureResourceAsDataURI(resource) else { return nil }
+                                let imageId = "image-\(geoIndex)-\(suffix)"
+                                colladaImages.append(Collada.Image(imageId: imageId, name: imageId, initFrom: dataURI))
+                                newparams += [
+                                    Collada.Effect.NewParam(
+                                        sid: "\(imageId)-surface",
+                                        surface: Collada.Effect.NewParam.Surface(type: "2D", initFrom: imageId),
+                                        sampler2D: nil
+                                    ),
+                                    Collada.Effect.NewParam(
+                                        sid: "\(imageId)-sampler",
+                                        surface: nil,
+                                        sampler2D: Collada.Effect.NewParam.Sampler2D(source: "\(imageId)-surface")
+                                    ),
+                                ]
+                                return Collada.Effect.Technique.ColorOrTextureProperty(
+                                    color: nil,
+                                    texture: Collada.Effect.Technique.TextureReference(texture: "\(imageId)-sampler", texcoord: "TEX0"),
+                                    float: nil
+                                )
+                            }
+
+                            // Diffuse: texture or tint color
+                            let diffuseProperty: Collada.Effect.Technique.ColorOrTextureProperty
+                            if let texResource = pbr.baseColor.texture?.resource,
+                               let texProp = await makeTextureProperty(texResource, suffix: "diffuse") {
+                                diffuseProperty = texProp
+                            } else {
+                                var r: CGFloat = 1, g: CGFloat = 1, b: CGFloat = 1, a: CGFloat = 1
+                                pbr.baseColor.tint.getRed(&r, green: &g, blue: &b, alpha: &a)
+                                diffuseProperty = Collada.Effect.Technique.ColorOrTextureProperty(
+                                    color: Collada.ColorRGBA(r: Float(r), g: Float(g), b: Float(b), a: Float(a)),
+                                    texture: nil, float: nil
+                                )
+                            }
+
+                            // Emission: texture or color (skipped when black and no texture)
+                            var emissionProperty: Collada.Effect.Technique.ColorOrTextureProperty? = nil
+                            if let texResource = pbr.emissiveColor.texture?.resource {
+                                emissionProperty = await makeTextureProperty(texResource, suffix: "emission")
+                            } else {
+                                var er: CGFloat = 0, eg: CGFloat = 0, eb: CGFloat = 0, ea: CGFloat = 1
+                                pbr.emissiveColor.color.getRed(&er, green: &eg, blue: &eb, alpha: &ea)
+                                if er > 0 || eg > 0 || eb > 0 {
+                                    emissionProperty = Collada.Effect.Technique.ColorOrTextureProperty(
+                                        color: Collada.ColorRGBA(r: Float(er), g: Float(eg), b: Float(eb), a: 1.0),
+                                        texture: nil, float: nil
+                                    )
+                                }
+                            }
+
+                            // Transparency: only exported when blending is .transparent.
+                            // COLLADA A_ONE convention: opacity = transparent.alpha × transparency.
+                            // Map opacity texture → <transparent><texture/></transparent>,
+                            // or solid white + <transparency> scalar for uniform opacity.
+                            var transparentProperty: Collada.Effect.Technique.ColorOrTextureProperty? = nil
+                            var transparencyProperty: Collada.Effect.Technique.FloatProperty? = nil
+                            if case .transparent(let opacity) = pbr.blending {
+                                if let texResource = opacity.texture?.resource {
+                                    transparentProperty = await makeTextureProperty(texResource, suffix: "opacity")
+                                } else {
+                                    transparentProperty = Collada.Effect.Technique.ColorOrTextureProperty(
+                                        color: Collada.ColorRGBA(r: 1, g: 1, b: 1, a: 1),
+                                        texture: nil, float: nil
+                                    )
+                                }
+                                transparencyProperty = Collada.Effect.Technique.FloatProperty(float: opacity.scale)
+                            }
+
+                            // Roughness → shininess (COLLADA Phong convention, 0–128)
+                            let shininess = (1.0 - pbr.roughness.scale) * 128.0
+
+                            let phong = Collada.Effect.Technique.PhongShading(
+                                emission: emissionProperty,
+                                ambient: nil,
+                                diffuse: diffuseProperty,
+                                specular: nil,
+                                shininess: Collada.Effect.Technique.FloatProperty(float: shininess),
+                                transparent: transparentProperty,
+                                transparency: transparencyProperty,
+                                indexOfRefraction: nil
+                            )
+                            colladaEffects.append(Collada.Effect(
+                                effectId: effectId,
+                                profileCommon: Collada.Effect.ProfileCommon(
+                                    newparams: newparams.isEmpty ? nil : newparams,
+                                    technique: Collada.Effect.Technique(
+                                        sid: "common",
+                                        phong: phong,
+                                        lambert: nil,
+                                        blinn: nil
+                                    )
+                                )
+                            ))
+                            colladaMaterials.append(Collada.Material(
+                                materialId: matId,
+                                name: matId,
+                                instanceEffect: Collada.InstanceEffect(url: "#\(effectId)")
+                            ))
+                            bindMaterial = Collada.BindMaterial(
+                                techniqueCommon: Collada.BindMaterial.TechniqueCommon(
+                                    instanceMaterials: [
+                                        Collada.InstanceMaterial(symbol: matId, target: "#\(matId)")
+                                    ]
+                                )
+                            )
                         }
 
                         let mesh = Collada.Geometry.Mesh(
@@ -161,7 +283,7 @@ public extension Entity {
                             triangles: [
                                 Collada.Geometry.Triangles(
                                     count: rawIndices.count / 3,
-                                    material: nil,
+                                    material: pbr != nil ? matId : nil,
                                     inputs: inputs,
                                     p: Collada.IndexArray(values: interleavedP)
                                 )
@@ -176,8 +298,9 @@ public extension Entity {
                             mesh: mesh
                         ))
 
-                        // Row-major COLLADA matrix from column-major SIMD (t[col][row])
-                        let t = entity.transform.matrix
+                        // Row-major COLLADA matrix from column-major SIMD (t[col][row]).
+                        // Use world-space transform so the flat node list has correct positions.
+                        let t = entity.transformMatrix(relativeTo: nil)
                         let matrixValues: [Double] = [
                             Double(t[0][0]), Double(t[1][0]), Double(t[2][0]), Double(t[3][0]),
                             Double(t[0][1]), Double(t[1][1]), Double(t[2][1]), Double(t[3][1]),
@@ -194,20 +317,26 @@ public extension Entity {
                             rotate: nil,
                             scale: nil,
                             instanceGeometry: [
-                                Collada.InstanceGeometry(url: "#\(geoId)", name: nil, bindMaterial: nil)
+                                Collada.InstanceGeometry(
+                                    url: "#\(geoId)",
+                                    name: nil,
+                                    bindMaterial: bindMaterial
+                                )
                             ],
                             children: nil
                         ))
+
+                        geoIndex += 1
                     }
                 }
             }
 
             for child in entity.children {
-                visit(child)
+                await visit(child)
             }
         }
 
-        visit(self)
+        await visit(self)
 
         guard !geometries.isEmpty else {
             throw DAEWriteError.meshExtractionFailed
@@ -216,9 +345,9 @@ public extension Entity {
         let collada = Collada(
             version: "1.4.1",
             asset: Collada.Asset(upAxis: "Y_UP"),
-            libraryImages: nil,
-            libraryEffects: nil,
-            libraryMaterials: nil,
+            libraryImages: colladaImages.isEmpty ? nil : Collada.LibraryImages(images: colladaImages),
+            libraryEffects: colladaEffects.isEmpty ? nil : Collada.LibraryEffects(effects: colladaEffects),
+            libraryMaterials: colladaMaterials.isEmpty ? nil : Collada.LibraryMaterials(materials: colladaMaterials),
             libraryGeometries: Collada.LibraryGeometries(geometries: geometries),
             libraryVisualScenes: Collada.LibraryVisualScenes(
                 visualScenes: [
@@ -245,4 +374,81 @@ public extension Entity {
         )
         try data.write(to: url)
     }
+}
+
+// MARK: - Texture Encode Helper
+
+/// Reads pixel data from a `TextureResource` via Metal and returns it as a base64 JPEG data URI.
+/// Returns `nil` on failure; caller falls back to solid color.
+@MainActor
+private func encodeTextureResourceAsDataURI(_ resource: TextureResource) async -> String? {
+    guard let device = MTLCreateSystemDefaultDevice() else { return nil }
+
+    let w = resource.width
+    let h = resource.height
+    guard w > 0, h > 0 else { return nil }
+
+    let desc = MTLTextureDescriptor.texture2DDescriptor(
+        pixelFormat: .rgba8Unorm,
+        width: w,
+        height: h,
+        mipmapped: false
+    )
+    desc.usage = .shaderWrite
+    // .shared is CPU-readable without blit synchronisation on all supported platforms.
+    desc.storageMode = .shared
+
+    guard let mtlTex = device.makeTexture(descriptor: desc) else { return nil }
+
+    do {
+        try await resource.copy(to: mtlTex)
+    } catch {
+        print("Texture copy failed: \(error)")
+        return nil
+    }
+
+    let bytesPerRow = 4 * w
+    var bytes = [UInt8](repeating: 0, count: h * bytesPerRow)
+    bytes.withUnsafeMutableBytes { ptr in
+        mtlTex.getBytes(
+            ptr.baseAddress!,
+            bytesPerRow: bytesPerRow,
+            from: MTLRegion(
+                origin: MTLOrigin(x: 0, y: 0, z: 0),
+                size: MTLSize(width: w, height: h, depth: 1)
+            ),
+            mipmapLevel: 0
+        )
+    }
+
+    // Scan alpha channel (byte index 3 of every RGBA quad) to decide encoding format.
+    let hasAlpha = stride(from: 3, to: bytes.count, by: 4).contains { bytes[$0] < 255 }
+
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+    guard let provider = CGDataProvider(data: Data(bytes) as CFData),
+          let cgImage = CGImage(
+              width: w, height: h,
+              bitsPerComponent: 8, bitsPerPixel: 32,
+              bytesPerRow: bytesPerRow,
+              space: colorSpace,
+              bitmapInfo: bitmapInfo,
+              provider: provider,
+              decode: nil,
+              shouldInterpolate: true,
+              intent: .defaultIntent
+          ) else { return nil }
+
+    let uti: CFString = hasAlpha ? ("public.png" as CFString) : ("public.jpeg" as CFString)
+    let props: CFDictionary? = hasAlpha ? nil : [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary
+    let mimeType = hasAlpha ? "image/png" : "image/jpeg"
+
+    let mutableData = NSMutableData()
+    guard let dest = CGImageDestinationCreateWithData(mutableData, uti, 1, nil)
+    else { return nil }
+    CGImageDestinationAddImage(dest, cgImage, props)
+    guard CGImageDestinationFinalize(dest) else { return nil }
+
+    let base64 = (mutableData as Data).base64EncodedString()
+    return "data:\(mimeType);base64,\(base64)"
 }

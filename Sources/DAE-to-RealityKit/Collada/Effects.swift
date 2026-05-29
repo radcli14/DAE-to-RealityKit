@@ -123,10 +123,13 @@ extension Collada.Effect {
 
         /// A surface resource (`<surface>` element) that wraps an image reference.
         struct Surface: Codable, Equatable {
+            /// Surface type (e.g. `"2D"`), encoded as an XML attribute (`type="2D"`).
+            let type: String?
             /// The image ID this surface initializes from (`<init_from>` element).
             let initFrom: String?
 
             enum CodingKeys: String, CodingKey {
+                case type
                 case initFrom = "init_from"
             }
         }
@@ -299,6 +302,50 @@ extension Collada.Effect.NewParam.Surface: DynamicNodeDecoding {
 
 extension Collada.Effect.Technique.TextureReference: DynamicNodeDecoding {
     static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        return .attribute
+    }
+}
+
+// MARK: - DynamicNodeEncoding
+
+extension Collada.Effect: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "id": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Effect.Technique: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "sid": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Effect.NewParam: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "sid": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Effect.NewParam.Surface: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "type": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Effect.Technique.TextureReference: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
         return .attribute
     }
 }

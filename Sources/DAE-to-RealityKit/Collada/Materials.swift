@@ -70,3 +70,20 @@ extension Collada.InstanceEffect: DynamicNodeDecoding {
         return .attribute
     }
 }
+
+// MARK: - DynamicNodeEncoding
+
+extension Collada.Material: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "id", "name": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.InstanceEffect: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        return .attribute
+    }
+}

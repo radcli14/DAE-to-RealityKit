@@ -63,3 +63,12 @@ extension Collada.Image: DynamicNodeDecoding {
         }
     }
 }
+
+extension Collada.Image: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "id", "name": return .attribute
+        default: return .element
+        }
+    }
+}

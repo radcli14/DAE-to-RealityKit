@@ -92,7 +92,9 @@ public extension ModelEntity {
         }
 
         // For .sceneKit or .auto, try SCNScene(url:) first — handles both raw DAE (macOS)
-        // and Xcode-compiled SCN transparently.
+        // and Xcode-compiled SCN transparently. SCNScene(url:) always fails on iOS, so
+        // compile it out there entirely and go straight to the custom parser fallback.
+        #if !os(iOS)
         if options.loader == .sceneKit || options.loader == .auto {
             do {
                 let scene = try SCNScene(url: url, options: nil)
@@ -104,10 +106,13 @@ public extension ModelEntity {
                 print("SCNScene(url:) failed: \(error.localizedDescription)")
             }
         }
+        #endif
 
         // .auto fallback: SceneKit failed, so try the custom parser.
         // Pass the source URL so relative texture paths can still be resolved.
-        guard let data = try? Data(contentsOf: url) else {
+        // Read off the main actor to avoid blocking the main event loop.
+        let readTask = Task.detached(priority: .userInitiated) { try Data(contentsOf: url) }
+        guard let data = try? await readTask.value else {
             throw DAEImportError.dataReadFailed(url)
         }
         return try await fromDataUsingCustomDAEParser(data, sourceURL: url)
@@ -168,16 +173,18 @@ public extension ModelEntity {
         _ data: Data,
         sourceURL: URL? = nil
     ) async throws -> ModelEntity {
-        let parser = Collada.Parser()
+        let rawScene: Collada.Parser.Scene
         do {
-            let raw = try parser.parse(data: data, sourceURL: sourceURL)
-            let root = ModelEntity()
-            for node in raw.rootNodes {
-                root.addChild(await node.buildEntity())
-            }
-            return root
+            rawScene = try await Task.detached(priority: .userInitiated) {
+                try Collada.Parser().parse(data: data, sourceURL: sourceURL)
+            }.value
         } catch {
             throw DAEImportError.customParserFailed(error)
         }
+        let root = ModelEntity()
+        for node in rawScene.rootNodes {
+            root.addChild(await node.buildEntity())
+        }
+        return root
     }
 }

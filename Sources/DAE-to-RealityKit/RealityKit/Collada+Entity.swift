@@ -110,13 +110,15 @@ extension Collada.Parser.Node {
         return pbr
     }
 
-    /// Loads a `TextureResource` from a local file or remote URL.
+    /// Loads a `TextureResource` from a local file, embedded data URI, or remote URL.
     ///
     /// Resolution cascade:
     /// 1. **Local file URL** — delegates directly to `TextureResource(contentsOf:)`.
-    /// 2. **Remote URL** (`http`/`https`) — downloads the image data via `URLSession`, decodes it
+    /// 2. **Data URI** (`data:`) — strips the header, base64-decodes the payload, decodes the
+    ///    image with ImageIO, then creates the texture from the resulting `CGImage`.
+    /// 3. **Remote URL** (`http`/`https`) — downloads the image data via `URLSession`, decodes it
     ///    with ImageIO, then creates the texture from the resulting `CGImage`.
-    /// 3. **Failure** — logs a diagnostic message and returns `nil` so callers fall back to the
+    /// 4. **Failure** — logs a diagnostic message and returns `nil` so callers fall back to the
     ///    flat color material without crashing.
     @MainActor
     private func loadTexture(from url: URL) async -> TextureResource? {
@@ -125,6 +127,27 @@ extension Collada.Parser.Node {
                 return try await TextureResource(
                     contentsOf: url,
                     withName: url.lastPathComponent,
+                    options: .init(semantic: .color)
+                )
+            }
+
+            // Embedded data URI (e.g. written by writeDAEAsset): decode without network.
+            if url.scheme == "data" {
+                let urlString = url.absoluteString
+                guard let commaIndex = urlString.firstIndex(of: ",") else {
+                    print("Texture decode failed: malformed data URI (no comma separator)")
+                    return nil
+                }
+                let base64String = String(urlString[urlString.index(after: commaIndex)...])
+                guard let imageData = Data(base64Encoded: base64String, options: .ignoreUnknownCharacters),
+                      let source = CGImageSourceCreateWithData(imageData as CFData, nil),
+                      let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+                    print("Texture decode failed: invalid base64 or image data in data URI")
+                    return nil
+                }
+                return try await TextureResource(
+                    image: cgImage,
+                    withName: "embedded-texture",
                     options: .init(semantic: .color)
                 )
             }

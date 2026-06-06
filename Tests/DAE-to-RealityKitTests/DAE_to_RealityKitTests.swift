@@ -1,3 +1,4 @@
+import CoreGraphics
 import Testing
 import Foundation
 @preconcurrency import RealityKit
@@ -108,6 +109,53 @@ func verifyEntityHasMesh(_ entity: Entity, label: String) {
 
     let loaded = try await ModelEntity.fromDAEAsset(url: tmpURL)
     _ = loaded
+}
+
+
+@Test func testRoundTripWithEmbeddedTexture() async throws {
+    // Build a 1×1 red CGImage in CPU memory — no Metal required for this step.
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    guard let ctx = CGContext(
+        data: nil, width: 1, height: 1,
+        bitsPerComponent: 8, bytesPerRow: 4,
+        space: colorSpace,
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+    ) else {
+        Issue.record("Failed to create CGContext"); return
+    }
+    ctx.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+    ctx.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+    guard let cgImage = ctx.makeImage() else {
+        Issue.record("Failed to make CGImage"); return
+    }
+
+    let texture = try await TextureResource(
+        image: cgImage,
+        withName: "round-trip-tex",
+        options: .init(semantic: .color)
+    )
+    let entity = await MainActor.run {
+        var mat = PhysicallyBasedMaterial()
+        mat.baseColor = .init(texture: .init(texture))
+        return ModelEntity(mesh: .generateBox(size: 0.1), materials: [mat])
+    }
+
+    let tmpURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("dae")
+    defer { try? FileManager.default.removeItem(at: tmpURL) }
+
+    try await entity.writeDAEAsset(to: tmpURL)
+
+    // Use the custom parser so the data URI in <init_from> is handled by loadTexture.
+    let loaded = try await ModelEntity.fromDAEAsset(url: tmpURL, options: .init(loader: .custom))
+    let loadedMat = await MainActor.run {
+        findModelEntity(in: loaded)?.model?.materials.first as? PhysicallyBasedMaterial
+    }
+    #expect(
+        loadedMat?.baseColor.texture != nil,
+        "Reloaded entity should have a non-nil baseColor texture from the embedded data URI"
+    )
 }
 
 

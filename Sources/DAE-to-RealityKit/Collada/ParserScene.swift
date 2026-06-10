@@ -76,6 +76,9 @@ extension Collada.Parser {
         /// Resolved URL for the diffuse texture, if the effect uses `<diffuse>` → `<texture>`.
         /// May be a local `file://` URL or a remote `http(s)://` URL when the source DAE was fetched remotely.
         var diffuseTextureURL: URL?
+        /// Decoded image bytes for textures embedded as base64 data URIs in `<init_from>`.
+        /// Set when the DAE was produced by `writeDAEAsset`; nil for path-based textures.
+        var diffuseTextureData: Data?
         /// Self-illumination color from the effect's `<emission>` property.
         var emissionColor: Collada.ColorRGBA?
         /// Ambient color from the effect's `<ambient>` property.

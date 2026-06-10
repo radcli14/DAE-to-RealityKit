@@ -28,10 +28,12 @@ public extension Entity {
 
         func visit(_ entity: Entity) async {
             if let modelEntity = entity as? ModelEntity, let model = modelEntity.model {
-                let pbr = model.materials.first as? PhysicallyBasedMaterial
-
                 for rkModel in model.mesh.contents.models {
                     for part in rkModel.parts {
+                        let matIdx = Int(part.materialIndex)
+                        let pbr = (matIdx < model.materials.count
+                                   ? model.materials[matIdx]
+                                   : model.materials.first) as? PhysicallyBasedMaterial
                         let geoId = "geometry-\(geoIndex)"
                         let matId = "mat-\(geoIndex)"
                         let effectId = "effect-\(geoIndex)"

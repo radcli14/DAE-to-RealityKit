@@ -63,10 +63,13 @@ extension Collada.Parser.Node {
                 )
             }
 
-            // Texture — async load from local file or remote URL.
+            // Texture — async load from local/remote URL, or decode embedded data URI bytes.
             // Overwrites the tint-only baseColor on success; leaves it unchanged on failure.
             if let textureURL = mat.diffuseTextureURL,
                let texture = await loadTexture(from: textureURL) {
+                pbr.baseColor = .init(texture: .init(texture))
+            } else if let data = mat.diffuseTextureData,
+                      let texture = await loadTexture(fromData: data) {
                 pbr.baseColor = .init(texture: .init(texture))
             }
 
@@ -150,6 +153,21 @@ extension Collada.Parser.Node {
             print("Texture load failed (\(url.lastPathComponent)): \(error)")
             return nil
         }
+    }
+
+    /// Loads a `TextureResource` from raw image bytes (e.g. a decoded base64 data URI).
+    @MainActor
+    private func loadTexture(fromData data: Data) async -> TextureResource? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            print("Texture decode failed for embedded data URI")
+            return nil
+        }
+        return try? await TextureResource(
+            image: cgImage,
+            withName: "embedded",
+            options: .init(semantic: .color)
+        )
     }
 }
 

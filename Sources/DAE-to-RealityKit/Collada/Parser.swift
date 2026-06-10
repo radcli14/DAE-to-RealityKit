@@ -84,20 +84,32 @@ extension Collada {
                 guard let eId = effect.effectId,
                       let technique = effect.profileCommon?.technique else { continue }
 
-                // Resolve texture sampler → surface → image → absolute URL
+                // Resolve texture sampler → surface → image → URL or decoded data
                 var textureURL: URL? = nil
+                var textureData: Data? = nil
                 if let texRef = technique.diffuseTexture,
                    let path = resolveTexturePath(
                        samplerSid: texRef.texture,
                        newparams: effect.profileCommon?.newparams,
                        imageMap: collada.imageMap
                    ) {
-                    textureURL = resolveTextureURL(path: path, sourceURL: sourceURL)
+                    if path.hasPrefix("data:") {
+                        // Embedded data URI from writeDAEAsset — decode base64 payload
+                        // directly rather than round-tripping through URL, which can fail
+                        // or mangle characters in very large base64 strings.
+                        if let commaIdx = path.firstIndex(of: ",") {
+                            let payload = String(path[path.index(after: commaIdx)...])
+                            textureData = Data(base64Encoded: payload, options: .ignoreUnknownCharacters)
+                        }
+                    } else {
+                        textureURL = resolveTextureURL(path: path, sourceURL: sourceURL)
+                    }
                 }
 
                 effectMap[eId] = Material(
                     diffuseColor: technique.diffuseColor,
                     diffuseTextureURL: textureURL,
+                    diffuseTextureData: textureData,
                     emissionColor: technique.emissionColor,
                     ambientColor: technique.ambientColor,
                     specularColor: technique.specularColor,

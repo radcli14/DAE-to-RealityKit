@@ -219,3 +219,64 @@ private func parseDuckMaterial(sourceURL: URL = duckRemoteURL) async throws -> C
     let entity = try await ModelEntity.fromDAEAsset(url: duckRemoteURL, options: .init(loader: .custom))
     await verifyEntityHasMesh(entity, label: "Duck (remote stream)")
 }
+
+
+// MARK: - Raw XML COLLADA from a file URL (macOS routing regression)
+
+/// Regression: a RAW XML COLLADA loaded from a file URL must render on every platform.
+///
+/// ARMOR writes mesh bytes to a UUID-named temp file and calls `fromDAEAsset(url:)`. The URL path
+/// used to try `SCNScene(url:)` first on non-iOS regardless of content — for raw XML COLLADA that
+/// fails (or worse, yields an empty scene), so the model silently did not render on macOS, while iOS
+/// (where that block is compiled out) rendered fine. The loader now routes by CONTENT, matching the
+/// `Data` overload, so both platforms take the custom parser for raw XML.
+///
+/// This deliberately does NOT load the bundle resource directly: a bundled `.dae` may be an
+/// Xcode-compiled SCN (bplist), which would exercise the SceneKit path and miss the regression.
+@MainActor
+@Test func testLoadRawXMLColladaFromFileURL() async throws {
+    guard let src = Bundle.module.url(forResource: "link_1", withExtension: "dae"),
+          let data = try? Data(contentsOf: src) else {
+        Issue.record("link_1.dae fixture is missing")
+        return
+    }
+
+    // Guard the premise: if this fixture is not raw XML, the test proves nothing.
+    let prefix = String(data: data.prefix(64), encoding: .utf8) ?? ""
+    #expect(prefix.contains("<?xml") || prefix.contains("<COLLADA"),
+            "fixture must be raw XML COLLADA for this regression to be meaningful")
+    #expect(ModelEntity.detectDAELoader(for: data) == .custom,
+            "raw XML COLLADA must be routed to the custom parser")
+
+    // Mirror ARMOR exactly: raw bytes → UUID-named temp file → load by URL.
+    let tmp = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathExtension("dae")
+    try data.write(to: tmp)
+    defer { try? FileManager.default.removeItem(at: tmp) }
+
+    let entity = try await ModelEntity.fromDAEAsset(url: tmp)
+    #expect(ModelEntity.containsRenderableMesh(entity),
+            "raw XML COLLADA from a file URL must produce renderable geometry")
+    verifyEntityHasMesh(entity, label: "raw XML COLLADA from file URL")
+}
+
+/// `containsRenderableMesh` is the signal that rejects a "successful" but empty parse, so a silently
+/// invisible model becomes a thrown `.noRenderableGeometry` and `.auto` falls back to the other parser.
+@MainActor
+@Test func testContainsRenderableMeshDetectsEmptyTrees() async throws {
+    #expect(ModelEntity.containsRenderableMesh(Entity()) == false,
+            "a bare entity has nothing to render")
+
+    let emptyParent = Entity()
+    emptyParent.addChild(Entity())
+    #expect(ModelEntity.containsRenderableMesh(emptyParent) == false,
+            "children without model components are still nothing to render")
+
+    let withNestedMesh = Entity()
+    let branch = Entity()
+    branch.addChild(ModelEntity(mesh: .generateBox(size: 0.1)))
+    withNestedMesh.addChild(branch)
+    #expect(ModelEntity.containsRenderableMesh(withNestedMesh),
+            "a mesh nested anywhere in the tree counts as renderable")
+}

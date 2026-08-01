@@ -361,7 +361,7 @@ extension Collada {
                 let triangulated = triangulatePolylist(
                     vcount: poly.vcount?.values ?? [],
                     p: poly.p.values,
-                    inputCount: poly.inputs.count
+                    inputCount: Self.indexStride(for: poly.inputs)
                 )
                 return (poly.inputs, triangulated)
             }
@@ -377,8 +377,10 @@ extension Collada {
         var hasUVs = false
 
         for (inputs, pValues) in primitives {
-            let inputCount = inputs.count
-            guard inputCount > 0 else { continue }
+            // The number of index slots per vertex, which is NOT `inputs.count` when two inputs
+            // share an offset — see `indexStride(for:)`.
+            let inputCount = Self.indexStride(for: inputs)
+            guard !inputs.isEmpty else { continue }
             let vertexCount = pValues.count / inputCount
 
             var positionInput: (offset: Int, source: Collada.Geometry.Source)?
@@ -461,14 +463,51 @@ extension Collada {
         )
     }
 
+    /// The number of index slots each vertex occupies in a primitive's `<p>` array.
+    ///
+    /// In COLLADA an `<input>`'s `offset` — not its position in the input list — selects which
+    /// slot of a vertex's index tuple it reads. Several inputs may therefore share one offset and
+    /// read the *same* index, so the stride is the number of DISTINCT slots, `max(offset) + 1`,
+    /// which can be smaller than `inputs.count`.
+    ///
+    /// Using `inputs.count` instead over-counts the stride by exactly the number of duplicated
+    /// offsets, making the parser expect a longer `<p>` than the file contains and index off the
+    /// end of it. Real example: Unitree's H2 Plus wrist meshes declare VERTEX and NORMAL both at
+    /// `offset="0"` (2 inputs, stride 1), so the parser wanted twice the indices actually present.
+    static func indexStride(for inputs: [Collada.Geometry.Input]) -> Int {
+        indexStride(forOffsets: inputs.map { $0.offset ?? 0 })
+    }
+
+    /// `indexStride(for:)` over raw offsets, split out so it can be tested without constructing
+    /// decoded `Input` values. Never returns 0 — a zero stride would collapse every index
+    /// calculation onto element 0 and make the caller's vertex loop non-terminating.
+    static func indexStride(forOffsets offsets: [Int]) -> Int {
+        guard let maxOffset = offsets.max() else { return 1 }
+        return Swift.max(1, maxOffset + 1)
+    }
+
     /// Converts a polylist's variable-vertex-count polygons into triangles using fan decomposition.
     ///
     /// For each polygon with N vertices, generates (N-2) triangles by fanning from the
-    /// first vertex. Preserves the interleaved index structure (each vertex has `inputCount` indices).
+    /// first vertex. Preserves the interleaved index structure (each vertex has `inputCount`
+    /// indices — see `indexStride(for:)`, which is what callers must pass here).
+    ///
+    /// Degenerate input is skipped rather than trapped on: a polygon with fewer than 3 vertices
+    /// cannot be fanned (and `1..<(count - 1)` would itself trap for `count < 2`), and a `vcount`
+    /// that promises more vertices than `p` actually holds would index out of range. Both appear
+    /// in real exporter output, and a malformed primitive should cost that primitive, not crash
+    /// the whole import.
     private func triangulatePolylist(vcount: [Int], p: [Int], inputCount: Int) -> [Int] {
+        guard inputCount > 0 else { return [] }
         var result: [Int] = []
         var offset = 0
         for count in vcount {
+            // A polygon needs at least 3 vertices to produce a triangle, and all of its indices
+            // must actually be present.
+            guard count >= 3, offset + count * inputCount <= p.count else {
+                offset += count * inputCount
+                continue
+            }
             for i in 1..<(count - 1) {
                 for j in 0..<inputCount {
                     result.append(p[offset + j])

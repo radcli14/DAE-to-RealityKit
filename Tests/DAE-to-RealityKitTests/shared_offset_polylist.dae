@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Minimal reproduction of the Unitree H2 Plus wrist-link crash.
+
+  The <polylist> declares TWO inputs that SHARE offset="0" (VERTEX and NORMAL). That is legal
+  COLLADA: the offset, not the input's position in the list, determines which slot of each
+  vertex's index tuple an input reads. Two inputs at the same offset both read the SAME index,
+  so the per-vertex stride here is max(offset)+1 == 1, NOT inputs.count == 2.
+
+  A parser that uses inputs.count as the stride expects twice as many values in <p> as are
+  actually present and indexes off the end of the array.
+
+  Real files with this exact shape: left/right_wrist_pitch_link.dae and
+  left/right_wrist_yaw_link.dae in unitreerobotics/unitree_ros (robots/h2_plus/meshes/).
+  This fixture is one triangle rather than their 700–2958, which is enough to trip the same
+  overrun while staying readable.
+-->
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+  <asset>
+    <unit meter="1" name="meter"/>
+    <up_axis>Z_UP</up_axis>
+  </asset>
+  <library_effects>
+    <effect id="effect_gray">
+      <profile_COMMON>
+        <technique sid="common">
+          <phong>
+            <diffuse><color sid="diffuse">0.5 0.5 0.5 1</color></diffuse>
+          </phong>
+        </technique>
+      </profile_COMMON>
+    </effect>
+  </library_effects>
+  <library_materials>
+    <material id="material_gray" name="gray">
+      <instance_effect url="#effect_gray"/>
+    </material>
+  </library_materials>
+  <library_geometries>
+    <geometry id="mesh_0" name="mesh_0">
+      <mesh>
+        <source id="mesh_0-positions">
+          <float_array id="mesh_0-positions-array" count="9">0 0 0 1 0 0 0 1 0</float_array>
+          <technique_common>
+            <accessor source="#mesh_0-positions-array" count="3" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <source id="mesh_0-normals">
+          <float_array id="mesh_0-normals-array" count="9">0 0 1 0 0 1 0 0 1</float_array>
+          <technique_common>
+            <accessor source="#mesh_0-normals-array" count="3" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="mesh_0-vertices">
+          <input semantic="POSITION" source="#mesh_0-positions"/>
+        </vertices>
+        <!-- The defect under test: both inputs at offset="0". -->
+        <polylist material="material_gray" count="1">
+          <input semantic="VERTEX" offset="0" source="#mesh_0-vertices"/>
+          <input semantic="NORMAL" offset="0" source="#mesh_0-normals"/>
+          <vcount>3</vcount>
+          <p>0 1 2</p>
+        </polylist>
+      </mesh>
+    </geometry>
+  </library_geometries>
+  <library_visual_scenes>
+    <visual_scene id="scene" name="scene">
+      <node id="node_0" name="node_0" type="NODE">
+        <matrix sid="transform">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</matrix>
+        <instance_geometry url="#mesh_0">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="material_gray" target="#material_gray"/>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+    </visual_scene>
+  </library_visual_scenes>
+  <scene>
+    <instance_visual_scene url="#scene"/>
+  </scene>
+</COLLADA>

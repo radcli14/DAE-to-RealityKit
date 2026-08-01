@@ -280,3 +280,40 @@ private func parseDuckMaterial(sourceURL: URL = duckRemoteURL) async throws -> C
     #expect(ModelEntity.containsRenderableMesh(withNestedMesh),
             "a mesh nested anywhere in the tree counts as renderable")
 }
+
+// MARK: - Shared-offset polylist inputs
+
+/// Two `<input>` elements sharing one `offset` must not be treated as two index slots.
+///
+/// In COLLADA the *offset*, not an input's position in the list, selects which slot of each
+/// vertex's index tuple that input reads — so N inputs can share fewer than N offsets, and the
+/// real per-vertex stride is `max(offset) + 1`, not `inputs.count`. Using the count overruns
+/// `<p>` by exactly the number of duplicated offsets and traps on an out-of-range index.
+///
+/// Found via `armor://gallery/unitree-h2-plus`: 4 of that robot's 32 DAE meshes
+/// (left/right_wrist_pitch_link, left/right_wrist_yaw_link) declare VERTEX and NORMAL both at
+/// `offset="0"`, giving 2 inputs over stride 1 — so the parser wanted 2× the indices the file
+/// actually contains. The other 28 meshes use distinct offsets and always parsed fine.
+@Test func testPolylistWithSharedInputOffsetsDoesNotOverrun() async throws {
+    guard let url = Bundle.module.url(forResource: "shared_offset_polylist", withExtension: "dae") else {
+        Issue.record("Failed to get URL for shared_offset_polylist.dae test resource")
+        return
+    }
+
+    let entity = try await ModelEntity.fromDAEAsset(url: url, options: .init(loader: .custom))
+    await verifyEntityHasMesh(entity, label: "shared_offset_polylist")
+}
+
+/// The stride helper itself, isolated from file loading: an input list's stride is driven by the
+/// distinct offsets it declares, not by how many inputs there are.
+@Test func testInputStrideUsesMaxOffsetNotInputCount() async throws {
+    // VERTEX + NORMAL both at offset 0 → one index per vertex.
+    #expect(Collada.Parser.indexStride(forOffsets: [0, 0]) == 1)
+    // The ordinary case: each input has its own slot.
+    #expect(Collada.Parser.indexStride(forOffsets: [0, 1, 2]) == 3)
+    // Sparse/misordered offsets still size by the maximum.
+    #expect(Collada.Parser.indexStride(forOffsets: [2, 0]) == 3)
+    // Degenerate input: never report a zero stride, which would make every index calculation
+    // collapse onto element 0 and loop forever at the call site.
+    #expect(Collada.Parser.indexStride(forOffsets: []) == 1)
+}

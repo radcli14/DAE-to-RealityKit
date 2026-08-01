@@ -34,7 +34,8 @@ let package = Package(
             resources: [
                 .process("shiny.dae"),
                 .process("anymal_base.dae"),
-                .process("link_1.dae")
+                .process("link_1.dae"),
+                .process("shared_offset_polylist.dae")
             ]
         ),
     ]

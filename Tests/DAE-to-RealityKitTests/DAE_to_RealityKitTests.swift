@@ -2,6 +2,7 @@ import Testing
 import Foundation
 @preconcurrency import RealityKit
 @preconcurrency import SceneKit
+import XMLCoder
 @testable import DAE_to_RealityKit
 
 
@@ -316,4 +317,78 @@ private func parseDuckMaterial(sourceURL: URL = duckRemoteURL) async throws -> C
     // Degenerate input: never report a zero stride, which would make every index calculation
     // collapse onto element 0 and loop forever at the call site.
     #expect(Collada.Parser.indexStride(forOffsets: []) == 1)
+}
+
+// MARK: - Document units and schema version
+
+/// `<unit meter="0.01">` must scale geometry to meters.
+///
+/// The fixture's triangle spans 100 document units at `meter="0.01"`, so it must render 1 m
+/// across. Ignoring the declaration renders it 100 m — the Unitree H2 Plus symptom, where
+/// `head_pitch_link.dae` (the one centimeter file among its 32 meshes) came out ~100x oversized
+/// and metres out of place.
+///
+/// World bounds, not `mesh.bounds`: the scale rides on the root node's transform, so the local
+/// mesh bounds still read in raw document units. Measuring locally is what made this look
+/// "unfixed" during development.
+@Test func testCentimeterUnitScalesGeometryToMeters() async throws {
+    guard let url = Bundle.module.url(forResource: "unit_centimeter_1_5_0", withExtension: "dae") else {
+        Issue.record("Failed to get URL for unit_centimeter_1_5_0.dae test resource")
+        return
+    }
+
+    let entity = try await ModelEntity.fromDAEAsset(url: url, options: .init(loader: .custom))
+    let extents = await MainActor.run { entity.visualBounds(relativeTo: nil).extents }
+
+    #expect(abs(extents.x - 1.0) < 0.001, "100 cm must render as 1 m, got \(extents.x)")
+    #expect(abs(extents.y - 1.0) < 0.001, "100 cm must render as 1 m, got \(extents.y)")
+}
+
+/// The same fixture is COLLADA **1.5.0** (2008/03 namespace), not 1.4.1 (2005/11). Both parse
+/// because `shouldProcessNamespaces` strips the namespace before element names are matched —
+/// 28 of H2 Plus's 32 meshes are 1.5.0. If that decoder setting is ever removed, this fails
+/// instead of silently breaking every Cinema 4D export.
+@Test func testParsesCollada150Namespace() async throws {
+    guard let url = Bundle.module.url(forResource: "unit_centimeter_1_5_0", withExtension: "dae") else {
+        Issue.record("Failed to get URL for unit_centimeter_1_5_0.dae test resource")
+        return
+    }
+    let raw = try String(contentsOf: url, encoding: .utf8)
+    #expect(raw.contains("2008/03/COLLADASchema"), "fixture must be the 1.5.0 namespace for this test to mean anything")
+
+    let entity = try await ModelEntity.fromDAEAsset(url: url, options: .init(loader: .custom))
+    await verifyEntityHasMesh(entity, label: "collada 1.5.0")
+}
+
+/// `unitScale` reads `meter`, ignores the `name` label, defaults to 1 when absent, and refuses
+/// values that would collapse or mirror the model.
+///
+/// Driven through real XML decoding rather than a hand-built struct, so it also covers the
+/// `DynamicNodeDecoding` conformance that makes `meter`/`name` decode as ATTRIBUTES. Without
+/// that, `Unit` decodes all-nil — indistinguishable from "no unit declared" — and a centimeter
+/// document silently renders 100x too large with no error anywhere.
+@Test func testUnitScaleParsing() async throws {
+    func scale(_ unitElement: String) throws -> Float {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <COLLADA xmlns="http://www.collada.org/2008/03/COLLADASchema" version="1.5.0">
+          <asset>\(unitElement)<up_axis>Y_UP</up_axis></asset>
+        </COLLADA>
+        """
+        let decoder = XMLDecoder()
+        decoder.trimValueWhitespaces = false
+        decoder.shouldProcessNamespaces = true
+        return try decoder.decode(Collada.self, from: Data(xml.utf8)).unitScale
+    }
+
+    #expect(try scale(#"<unit meter="0.01" name="centimeter"/>"#) == 0.01)
+    #expect(try scale(#"<unit meter="0.001" name="millimeter"/>"#) == 0.001)
+    #expect(try scale(#"<unit meter="1" name="meter"/>"#) == 1)
+    // Absent <unit> means meters, per the specification.
+    #expect(try scale("") == 1)
+    // `meter` is authoritative; a mislabelled name must not override it.
+    #expect(try scale(#"<unit meter="0.01" name="meter"/>"#) == 0.01)
+    // Degenerate declarations are ignored rather than collapsing or mirroring the geometry.
+    #expect(try scale(#"<unit meter="0" name="broken"/>"#) == 1)
+    #expect(try scale(#"<unit meter="-1" name="broken"/>"#) == 1)
 }

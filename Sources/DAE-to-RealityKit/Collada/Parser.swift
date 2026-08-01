@@ -10,7 +10,11 @@ import XMLCoder
 import simd
 
 extension Collada {
-    /// Parses COLLADA 1.4.1 XML data into an intermediate scene representation.
+    /// Parses COLLADA XML data into an intermediate scene representation.
+    ///
+    /// Handles both COLLADA 1.4.1 (2005/11 namespace) and 1.5.0 (2008/03): `XMLDecoder`'s
+    /// `shouldProcessNamespaces` strips the namespace before element names are matched, so the
+    /// same model structures decode either version.
     ///
     /// The parser decodes the XML into ``Collada`` model structures using `XMLDecoder`,
     /// then transforms the decoded data into a ``Collada/Parser/Scene`` containing
@@ -202,12 +206,23 @@ extension Collada {
         }
         guard let vs = visualScene else { return [] }
         return vs.nodes.map { node in
-            makeNode(
+            var root = makeNode(
                 node,
-                parentWorldTransform: collada.rootTransform,
+                parentWorldTransform: matrix_identity_float4x4,
                 geometryMap: collada.geometryMap,
                 materialMap: materialMap
             )
+            // Fold the document's unit scale into the TOP-LEVEL nodes only. `buildEntity` nests
+            // children under their parents, so a transform placed here propagates down the
+            // RealityKit hierarchy naturally and applies exactly once — whereas composing it into
+            // every node's `localTransform` inside `makeNode` would re-apply it at every level.
+            //
+            // It cannot be passed as `parentWorldTransform`: `makeNode` derives a `worldTransform`
+            // from that to hand to its children, but stores only the node's OWN `localTransform`,
+            // so anything supplied there is silently dropped. That is exactly why
+            // `collada.rootTransform` has never had any effect — see its doc comment.
+            root.localTransform = collada.unitScaleTransform * root.localTransform
+            return root
         }
     }
 

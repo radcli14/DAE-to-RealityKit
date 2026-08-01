@@ -59,7 +59,41 @@ extension Collada {
 }
 
 extension Collada {
-    /// Computes the root transform matrix to convert from the document's up-axis to RealityKit's Y-up.
+    /// Meters per document distance unit, from `<asset><unit meter="…">`.
+    ///
+    /// Defaults to 1 when the element is absent (the COLLADA default: the document is already in
+    /// meters), and ignores a non-positive or non-finite declaration rather than collapsing or
+    /// mirroring the whole model.
+    var unitScale: Float {
+        guard let meter = asset?.unit?.meter, meter.isFinite, meter > 0 else { return 1 }
+        return Float(meter)
+    }
+
+    /// A uniform scale matrix converting the document's distance unit to meters, or identity when
+    /// the document is already in meters.
+    ///
+    /// `<unit meter="0.01" name="centimeter">` means one unit in the file equals 0.01 m, so
+    /// coordinates must be SCALED BY that factor to reach meters. Ignoring it renders a
+    /// centimeter-authored file 100× too large — exactly what Unitree H2 Plus's
+    /// `head_pitch_link.dae` (a Cinema 4D export, and the only centimeter file among its 32
+    /// meshes) did: a head 100× oversized and metres below the robot.
+    var unitScaleTransform: simd_float4x4 {
+        let scale = unitScale
+        guard scale != 1 else { return matrix_identity_float4x4 }
+        return simd_float4x4(diagonal: SIMD4(scale, scale, scale, 1))
+    }
+
+    /// The up-axis rotation that would bring this document into RealityKit's Y-up.
+    ///
+    /// ⚠️ **Deliberately NOT applied by the parser**, and it never has been: `makeNode` threads it
+    /// down as `parentWorldTransform` but stores only each node's own `localTransform`, so the
+    /// value is computed and discarded at every level. Enabling it is a real behavioural change,
+    /// not a bug fix — consumers of this package have only ever seen unrotated geometry and may
+    /// compensate downstream (ARMOR, for one, deliberately keeps URDF meshes Z-up and applies its
+    /// own Z-up→Y-up conversion in the scene graph, so rotating here would double-correct and
+    /// tip every existing robot on its side). Left inert on purpose; the unit scale above is
+    /// applied separately and independently precisely so fixing the scale bug does not smuggle in
+    /// this rotation.
     var rootTransform: simd_float4x4 {
         let up = Transforms.UpAxis.from(asset?.upAxis)
         return Transforms.AxisConversion.toYUp(from: up)

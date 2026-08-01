@@ -76,8 +76,48 @@ extension Collada {
         /// Defaults to `"Y_UP"` per the COLLADA specification when absent.
         let upAxis: String?
 
+        /// The document's distance unit (`<unit>`), if declared.
+        let unit: Unit?
+
         enum CodingKeys: String, CodingKey {
             case upAxis = "up_axis"
+            case unit
+        }
+
+        /// The `<unit>` element: how large one distance unit in this document is, in meters.
+        ///
+        /// Per COLLADA 1.4.1 Section 7.1.1, `meter` is the conversion factor — `meter="0.01"`
+        /// (`name="centimeter"`) means one unit here equals 0.01 m, so coordinates must be
+        /// multiplied by 0.01 to reach meters. `name` is a human label only and carries no
+        /// authority: it is NOT parsed, because a file whose `name` and `meter` disagree must
+        /// follow `meter`.
+        struct Unit: Codable, Equatable {
+            /// Meters per document unit. Defaults to 1 per the specification when absent.
+            let meter: Double?
+            /// The unit's display name (e.g. `"centimeter"`). Informational only.
+            let name: String?
+        }
+    }
+}
+
+// `<unit meter="0.01" name="centimeter"/>` carries both values as ATTRIBUTES on an otherwise
+// empty element. Without these conformances XMLCoder looks for child *elements* named `meter`
+// and `name`, finds none, and silently decodes `Unit` as all-nil — which reads as "no unit
+// declared" and leaves a centimeter document rendered 100× too large, with no error anywhere.
+extension Collada.Asset.Unit: DynamicNodeDecoding {
+    static func nodeDecoding(for key: CodingKey) -> XMLDecoder.NodeDecoding {
+        switch key.stringValue {
+        case "meter", "name": return .attribute
+        default: return .element
+        }
+    }
+}
+
+extension Collada.Asset.Unit: DynamicNodeEncoding {
+    static func nodeEncoding(for key: CodingKey) -> XMLEncoder.NodeEncoding {
+        switch key.stringValue {
+        case "meter", "name": return .attribute
+        default: return .element
         }
     }
 }

@@ -35,7 +35,8 @@ let package = Package(
                 .process("shiny.dae"),
                 .process("anymal_base.dae"),
                 .process("link_1.dae"),
-                .process("shared_offset_polylist.dae")
+                .process("shared_offset_polylist.dae"),
+                .process("unit_centimeter_1_5_0.dae")
             ]
         ),
     ]

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Two things at once, both taken from Unitree H2 Plus's head_pitch_link.dae:
+
+  1. COLLADA **1.5.0**, with the 2008/03 schema namespace rather than 1.4.1's 2005/11. The
+     parser handles either because `shouldProcessNamespaces = true` strips the namespace before
+     element names are matched — 28 of H2 Plus's 32 meshes are 1.5.0 and always parsed fine.
+     This fixture pins that, so removing namespace processing fails a test rather than silently
+     breaking every Cinema 4D export.
+
+  2. `<unit meter="0.01" name="centimeter"/>`. The triangle spans 100 document units, so a
+     correct reader renders it 1 m across. A reader that ignores <unit> renders it 100 m — the
+     real symptom, where H2 Plus's head came out ~100x oversized.
+
+  Kept deliberately axis-neutral (Y_UP, identity node matrix) so it tests scale alone: the
+  up-axis conversion is NOT applied by this parser, by design — see `Collada.rootTransform`.
+-->
+<COLLADA xmlns="http://www.collada.org/2008/03/COLLADASchema" version="1.5.0">
+  <asset>
+    <contributor>
+      <authoring_tool>DAE-to-RealityKit test fixture</authoring_tool>
+    </contributor>
+    <unit meter="0.01" name="centimeter"/>
+    <up_axis>Y_UP</up_axis>
+  </asset>
+  <library_effects>
+    <effect id="effect_gray">
+      <profile_COMMON>
+        <technique sid="common">
+          <phong>
+            <diffuse><color>0.5 0.5 0.5 1</color></diffuse>
+          </phong>
+        </technique>
+      </profile_COMMON>
+    </effect>
+  </library_effects>
+  <library_materials>
+    <material id="material_gray" name="gray">
+      <instance_effect url="#effect_gray"/>
+    </material>
+  </library_materials>
+  <library_geometries>
+    <geometry id="mesh_0" name="mesh_0">
+      <mesh>
+        <source id="mesh_0-positions">
+          <float_array id="mesh_0-positions-array" count="9">0 0 0 100 0 0 0 100 0</float_array>
+          <technique_common>
+            <accessor source="#mesh_0-positions-array" count="3" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <source id="mesh_0-normals">
+          <float_array id="mesh_0-normals-array" count="9">0 0 1 0 0 1 0 0 1</float_array>
+          <technique_common>
+            <accessor source="#mesh_0-normals-array" count="3" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="mesh_0-vertices">
+          <input semantic="POSITION" source="#mesh_0-positions"/>
+        </vertices>
+        <triangles material="material_gray" count="1">
+          <input semantic="VERTEX" offset="0" source="#mesh_0-vertices"/>
+          <input semantic="NORMAL" offset="1" source="#mesh_0-normals"/>
+          <p>0 0 1 1 2 2</p>
+        </triangles>
+      </mesh>
+    </geometry>
+  </library_geometries>
+  <library_visual_scenes>
+    <visual_scene id="scene" name="scene">
+      <node id="node_0" name="node_0" type="NODE">
+        <matrix sid="transform">1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1</matrix>
+        <instance_geometry url="#mesh_0">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="material_gray" target="#material_gray"/>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+    </visual_scene>
+  </library_visual_scenes>
+  <scene>
+    <instance_visual_scene url="#scene"/>
+  </scene>
+</COLLADA>

@@ -346,7 +346,9 @@ public extension Entity {
 
         let collada = Collada(
             version: "1.4.1",
-            asset: Collada.Asset(upAxis: "Y_UP"),
+            // RealityKit entities are already in meters, so the written document declares meters
+            // explicitly rather than relying on the reader's default.
+            asset: Collada.Asset(upAxis: "Y_UP", unit: .init(meter: 1, name: "meter")),
             libraryImages: colladaImages.isEmpty ? nil : Collada.LibraryImages(images: colladaImages),
             libraryEffects: colladaEffects.isEmpty ? nil : Collada.LibraryEffects(effects: colladaEffects),
             libraryMaterials: colladaMaterials.isEmpty ? nil : Collada.LibraryMaterials(materials: colladaMaterials),

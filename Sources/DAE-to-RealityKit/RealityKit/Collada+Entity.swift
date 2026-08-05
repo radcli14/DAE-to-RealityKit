@@ -26,7 +26,13 @@ extension Collada.Parser.Node {
         if let mesh {
             do {
                 let meshResource = try mesh.buildMeshResource(name: name)
-                entity.model = ModelComponent(mesh: meshResource, materials: [await buildMaterial()])
+                // One material per mesh part, in the same order — each part's descriptor declares
+                // `materialIndex` equal to its position, so the arrays must stay aligned.
+                var materials: [RealityKit.Material] = []
+                for part in mesh.parts {
+                    materials.append(await buildMaterial(from: material(for: part)))
+                }
+                entity.model = ModelComponent(mesh: meshResource, materials: materials)
             } catch {
                 print("Failed to generate mesh for node '\(name ?? "?")': \(error)")
             }
@@ -47,11 +53,14 @@ extension Collada.Parser.Node {
     /// - Shininess → `roughness` (inverted: `1 - shininess/128`)
     /// - Specular color → `specular` (using luminance)
     /// - Transparency → `blending` with alpha opacity
+    ///
+    /// Takes the material explicitly rather than reading `self.material`, because a node can now
+    /// carry several — one per mesh part — resolved through `material(for:)`.
     @MainActor
-    private func buildMaterial() async -> PhysicallyBasedMaterial {
+    private func buildMaterial(from colladaMaterial: Collada.Parser.Material?) async -> PhysicallyBasedMaterial {
         var pbr = PhysicallyBasedMaterial()
 
-        if let mat = material {
+        if let mat = colladaMaterial {
             // Base color (diffuse) — set as tint first so it acts as a fallback
             // if the texture URL is absent or fails to load.
             if let dc = mat.diffuseColor {
@@ -176,17 +185,25 @@ extension Collada.Parser.Mesh {
     ///
     /// Creates a `MeshDescriptor` with positions, triangle indices, and optionally
     /// normals and texture coordinates, then generates the mesh resource.
+    /// Emits one `MeshDescriptor` per part, each claiming the material slot at its own index, so
+    /// `ModelComponent.materials[i]` applies to part `i` only. A single merged descriptor can carry
+    /// just one material, which is what flattened a multi-material geometry to a single colour.
     @MainActor
     func buildMeshResource(name: String? = nil) throws -> MeshResource {
-        var descriptor = MeshDescriptor(name: name ?? "mesh")
-        descriptor.positions = MeshBuffer(positions)
-        descriptor.primitives = .triangles(indices)
-        if let normals {
-            descriptor.normals = MeshBuffer(normals)
+        let base = name ?? "mesh"
+        let descriptors = parts.enumerated().map { index, part -> MeshDescriptor in
+            var descriptor = MeshDescriptor(name: parts.count == 1 ? base : "\(base).\(index)")
+            descriptor.positions = MeshBuffer(part.positions)
+            descriptor.primitives = .triangles(part.indices)
+            if let normals = part.normals {
+                descriptor.normals = MeshBuffer(normals)
+            }
+            if let uvs = part.uvs {
+                descriptor.textureCoordinates = MeshBuffer(uvs)
+            }
+            descriptor.materials = .allFaces(UInt32(index))
+            return descriptor
         }
-        if let uvs {
-            descriptor.textureCoordinates = MeshBuffer(uvs)
-        }
-        return try MeshResource.generate(from: [descriptor])
+        return try MeshResource.generate(from: descriptors)
     }
 }

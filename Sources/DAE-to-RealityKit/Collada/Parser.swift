@@ -241,6 +241,7 @@ extension Collada {
 
         var mesh: Mesh? = nil
         var nodeMaterial: Material? = nil
+        var materialsBySymbol: [String: Material] = [:]
         if let instances = node.instanceGeometry {
             for inst in instances {
                 let geoId = String(inst.url.dropFirst())
@@ -248,12 +249,15 @@ extension Collada {
                     mesh = extractMesh(from: colladaMesh)
                 }
                 if let binds = inst.bindMaterial?.techniqueCommon?.instanceMaterials {
+                    // EVERY binding is kept, keyed by symbol, so each mesh part can resolve its
+                    // own. Taking just the first (and breaking) painted a multi-material geometry
+                    // in one colour — Unitree's H2 Plus torso and head, whose three polylists bind
+                    // black trim first and the light body material last, came out entirely black.
                     for bind in binds {
                         let matId = String(bind.target.dropFirst())
-                        if let mat = materialMap[matId] {
-                            nodeMaterial = mat
-                            break
-                        }
+                        guard let mat = materialMap[matId] else { continue }
+                        materialsBySymbol[bind.symbol] = mat
+                        if nodeMaterial == nil { nodeMaterial = mat }
                     }
                 }
             }
@@ -273,6 +277,7 @@ extension Collada {
             localTransform: local,
             mesh: mesh,
             material: nodeMaterial,
+            materialsBySymbol: materialsBySymbol,
             children: children
         )
     }
@@ -368,9 +373,9 @@ extension Collada {
             }
         }
 
-        let primitives: [(inputs: [Collada.Geometry.Input], indices: [Int])]
+        let primitives: [(material: String?, inputs: [Collada.Geometry.Input], indices: [Int])]
         if let tris = colladaMesh.triangles, !tris.isEmpty {
-            primitives = tris.map { ($0.inputs, $0.p.values) }
+            primitives = tris.map { ($0.material, $0.inputs, $0.p.values) }
         } else if let polys = colladaMesh.polylist, !polys.isEmpty {
             primitives = polys.map { poly in
                 let triangulated = triangulatePolylist(
@@ -378,25 +383,30 @@ extension Collada {
                     p: poly.p.values,
                     inputCount: Self.indexStride(for: poly.inputs)
                 )
-                return (poly.inputs, triangulated)
+                return (poly.material, poly.inputs, triangulated)
             }
         } else {
             return nil
         }
 
-        var allPositions: [SIMD3<Float>] = []
-        var allNormals: [SIMD3<Float>] = []
-        var allUVs: [SIMD2<Float>] = []
-        var allIndices: [UInt32] = []
-        var hasNormals = false
-        var hasUVs = false
+        // One `Mesh.Part` per primitive. These used to be concatenated into a single vertex/index
+        // buffer, which discarded the `material` symbol each primitive declares — so a geometry
+        // built from several polylists rendered entirely in whichever material was bound first.
+        var parts: [Mesh.Part] = []
 
-        for (inputs, pValues) in primitives {
+        for (materialSymbol, inputs, pValues) in primitives {
             // The number of index slots per vertex, which is NOT `inputs.count` when two inputs
             // share an offset — see `indexStride(for:)`.
             let inputCount = Self.indexStride(for: inputs)
             guard !inputs.isEmpty else { continue }
             let vertexCount = pValues.count / inputCount
+
+            var allPositions: [SIMD3<Float>] = []
+            var allNormals: [SIMD3<Float>] = []
+            var allUVs: [SIMD2<Float>] = []
+            var allIndices: [UInt32] = []
+            var hasNormals = false
+            var hasUVs = false
 
             var positionInput: (offset: Int, source: Collada.Geometry.Source)?
             var normalInput: (offset: Int, source: Collada.Geometry.Source)?
@@ -428,8 +438,6 @@ extension Collada {
                     break
                 }
             }
-
-            let baseIndex = UInt32(allPositions.count)
 
             for v in 0..<vertexCount {
                 let baseOffset = v * inputCount
@@ -464,17 +472,27 @@ extension Collada {
                     }
                 }
 
-                allIndices.append(baseIndex + UInt32(v))
+                // Indices are local to this part, so they start at 0 rather than being rebased
+                // onto a shared buffer.
+                allIndices.append(UInt32(v))
             }
+
+            guard !allPositions.isEmpty else { continue }
+            parts.append(Mesh.Part(
+                materialSymbol: materialSymbol,
+                positions: allPositions,
+                // An attribute is only usable when it was produced for EVERY vertex of the part:
+                // the bounds guards above skip malformed entries, and a short buffer would either
+                // be rejected by `MeshResource.generate` or silently misalign with the positions.
+                normals: hasNormals && allNormals.count == allPositions.count ? allNormals : nil,
+                uvs: hasUVs && allUVs.count == allPositions.count ? allUVs : nil,
+                indices: allIndices
+            ))
         }
 
-        guard !allPositions.isEmpty else { return nil }
+        guard !parts.isEmpty else { return nil }
 
-        return Mesh(
-            positions: allPositions,
-            normals: hasNormals ? allNormals : nil,
-            uvs: hasUVs ? allUVs : nil,
-            indices: allIndices
+        return Mesh(parts: parts
         )
     }
 

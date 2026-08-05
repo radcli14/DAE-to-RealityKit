@@ -392,3 +392,47 @@ private func parseDuckMaterial(sourceURL: URL = duckRemoteURL) async throws -> C
     #expect(try scale(#"<unit meter="0" name="broken"/>"#) == 1)
     #expect(try scale(#"<unit meter="-1" name="broken"/>"#) == 1)
 }
+
+// MARK: - Multi-material geometry
+
+/// A single `<geometry>` split into several `<polylist>` parts, each naming a different material
+/// symbol, is ordinary COLLADA — it is how exporters represent a part with painted trim.
+/// `unitree_ros`' H2 Plus `torso_link.dae` is exactly this shape: three polylists
+/// (24 / 4112 / 17481 polygons) bound to a black material, a second black one, and a light
+/// lavender one, with the LIGHT material covering ~81% of the surface.
+///
+/// This fixture reproduces that structure at three triangles: first bound symbol black, the
+/// majority-surface material light.
+@MainActor @Test func testMultiMaterialGeometryKeepsEveryMaterial() async throws {
+    guard let url = Bundle.module.url(forResource: "multi_material", withExtension: "dae") else {
+        Issue.record("Failed to get URL for test resource")
+        return
+    }
+    let entity = try await ModelEntity.fromDAEAsset(url: url, options: .init(loader: .custom))
+    let model = try #require(findModelEntity(in: entity)?.model)
+
+    // Three bound materials, so three materials on the model — one per part.
+    #expect(model.materials.count == 3, "each <polylist>'s material must survive")
+    #expect(model.mesh.contents.models.flatMap { Array($0.parts) }.count == 3,
+            "the three polylists must stay separate mesh parts, not merge into one")
+}
+
+/// The visible symptom: the whole part rendering black. The parser bound only the FIRST
+/// `<instance_material>` and applied it to the merged mesh, so H2 Plus' torso and head took the
+/// black trim colour over their entire surface instead of the light body colour.
+@MainActor @Test func testMultiMaterialGeometryDoesNotPaintEverythingWithTheFirstMaterial() async throws {
+    guard let url = Bundle.module.url(forResource: "multi_material", withExtension: "dae") else {
+        Issue.record("Failed to get URL for test resource")
+        return
+    }
+    let entity = try await ModelEntity.fromDAEAsset(url: url, options: .init(loader: .custom))
+    let model = try #require(findModelEntity(in: entity)?.model)
+
+    let tints = model.materials.compactMap { ($0 as? PhysicallyBasedMaterial)?.baseColor.tint }
+    let isBlack: (CGColor) -> Bool = { c in
+        guard let comps = c.components, comps.count >= 3 else { return false }
+        return comps[0] < 0.01 && comps[1] < 0.01 && comps[2] < 0.01
+    }
+    #expect(tints.contains { !isBlack($0.cgColor) },
+            "the light body material (0.79 0.82 0.93) must appear somewhere — all-black means the first bound material was applied to the whole merged mesh")
+}
